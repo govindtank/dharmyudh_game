@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DharmYudh - The Great War of Kurukshetra</title>
+  <meta name="description" content="DharmYudh - A Mahabharata battle game. Fight as legendary warriors from the epic Kurukshetra war with epic visual effects and fluid combat.">
+  <meta name="theme-color" content="#0a0a0f">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-logo">DHARMYUDH</div>
+    <div class="loading-subtitle">The Great War of Kurukshetra</div>
+    <div class="loading-devanagari">धर्मयुद्ध</div>
+    <div class="loading-bar-container">
+      <div id="loading-bar" class="loading-bar"></div>
+    </div>
+    <div class="loading-text">Loading...</div>
+  </div>
+
+  <!-- Game Wrapper -->
+  <div id="game-wrapper">
+    <div id="game-container">
+      <canvas id="gameCanvas"></canvas>
+
+      <!-- Toast Messages (DOM-based for fallback) -->
+      <div id="toast" class="toast"></div>
+    </div>
+  </div>
+
+  <script src="js/game.js"></script>
+</body>
+</html>
