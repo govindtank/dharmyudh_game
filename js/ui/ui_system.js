@@ -5,6 +5,8 @@
 import { CONFIG, clamp } from '../engine/config.js';
 import { SettingsPanel } from './settings.js';
 import { ACHIEVEMENTS } from '../progression/achievements.js';
+import { CHARACTERS } from '../characters/roster.js';
+import { BaseCharacter } from '../characters/base_character.js';
 
 export class UISystem {
   constructor(game) {
@@ -196,13 +198,126 @@ export class UISystem {
     ctx.save();
     
     // Background Dark tint
-    ctx.fillStyle = '#0a0a0f';
+    ctx.fillStyle = '#050508';
     ctx.fillRect(0, 0, CONFIG.W, CONFIG.H);
 
-    ctx.fillStyle = '#dfa650';
-    ctx.font = 'bold 32px Rajdhani';
+    // Decorative border
+    ctx.strokeStyle = '#dfa650';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, 20, CONFIG.W - 40, CONFIG.H - 40);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 36px Rajdhani';
     ctx.textAlign = 'center';
-    ctx.fillText('SELECT YOUR WARRIOR', CONFIG.W / 2, 70);
+    ctx.fillText('SELECT YOUR WARRIOR', CONFIG.W / 2, 65);
+
+    const chData = CHARACTERS[this.game.selectedChar];
+    if (chData) {
+      // Lazily create character preview entity
+      if (!this.selectedCharEntity || this.selectedCharEntity.id !== chData.id) {
+        this.selectedCharEntity = new BaseCharacter(chData, true);
+      }
+
+      const cx = CONFIG.W / 2;
+      const cy = 300;
+
+      // Draw character background radial glow
+      const grad = ctx.createRadialGradient(cx, cy - 30, 10, cx, cy - 30, 200);
+      grad.addColorStop(0, `${chData.color}35`);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.fillRect(cx - 250, cy - 230, 500, 400);
+
+      // Render character using unified joint CharacterRenderer scaled up
+      ctx.save();
+      ctx.translate(cx, cy + 40);
+      ctx.scale(2.4, 2.4);
+      
+      this.selectedCharEntity.x = 0;
+      this.selectedCharEntity.y = 0;
+      this.selectedCharEntity.facing = 1;
+      this.selectedCharEntity.state = 'idle';
+      this.selectedCharEntity.animTime = (this.selectedCharEntity.animTime || 0) + 1/60;
+      
+      this.game.charRenderer.draw(ctx, this.selectedCharEntity);
+      ctx.restore();
+
+      // Check if character is locked
+      const isLocked = this.game.storage.data.progression.unlocks.lockedCharacters.includes(chData.id);
+      if (isLocked) {
+        // Draw Lock visual overlay
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(cx - 150, cy - 100, 300, 200);
+
+        ctx.fillStyle = '#ff3b30';
+        ctx.font = 'bold 80px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillText('🔒', cx, cy + 10);
+        ctx.font = 'bold 16px Rajdhani';
+        ctx.fillText('LOCKED WARRIOR', cx, cy + 50);
+        ctx.fillStyle = '#e8d5b0';
+        ctx.fillText('Beat Arcade Mode to unlock!', cx, cy + 75);
+      }
+
+      // Render Character Details
+      ctx.fillStyle = chData.color;
+      ctx.font = 'bold 36px Rajdhani';
+      ctx.textAlign = 'center';
+      ctx.fillText(chData.name.toUpperCase(), cx, 430);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.font = '22px Noto Sans Devanagari, Rajdhani';
+      ctx.fillText(chData.devanagari || '', cx, 460);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.font = 'italic 16px Rajdhani';
+      ctx.fillText(chData.title.toUpperCase(), cx, 485);
+
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+      ctx.font = 'italic 15px Rajdhani';
+      ctx.fillText(`"${chData.taunt}"`, cx, 510);
+
+      // Render Stats bars
+      const st = 535;
+      const sw = 250;
+      const sh = 10;
+      const sg = 18;
+
+      const stats = [
+        { label: 'HP', val: chData.stats.hp, max: 200, color: '#ef5350' },
+        { label: 'ATK', val: chData.stats.attack, max: 25, color: '#ff7043' },
+        { label: 'DEF', val: chData.stats.defense, max: 18, color: '#42a5f5' },
+        { label: 'SPD', val: chData.stats.speed, max: 240, color: '#66bb6a' },
+        { label: 'SPC', val: chData.stats.specialDmg, max: 55, color: '#ab47bc' }
+      ];
+
+      stats.forEach((s, idx) => {
+        const yy = st + idx * sg;
+        const fillWidth = (s.val / s.max) * sw;
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = 'bold 12px Rajdhani';
+        ctx.fillText(s.label, cx - sw / 2 - 35, yy + 8);
+
+        // Back bar
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.fillRect(cx - sw / 2, yy, sw, sh);
+
+        // Filled bar
+        ctx.fillStyle = s.color;
+        ctx.fillRect(cx - sw / 2, yy, fillWidth, sh);
+      });
+    }
+
+    // Navigation indicators
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff8f00';
+    ctx.font = 'bold 15px Rajdhani';
+    ctx.fillText('◄  CLICK LEFT/RIGHT SIDE TO NAVIGATE  ►', CONFIG.W / 2, CONFIG.H - 55);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px Rajdhani';
+    ctx.fillText('PRESS ENTER OR CLICK MIDDLE TO CONFIRM  |  ESC TO RETURN', CONFIG.W / 2, CONFIG.H - 35);
 
     ctx.restore();
   }
