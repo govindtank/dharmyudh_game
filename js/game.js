@@ -1469,6 +1469,8 @@ class DharmYudhGame {
     this.comboEffectTimer=0;
     this.maxComboDisplay=0;
     this.titlePulse=0;
+    this.koFreezeTimer=0;this.koFreezeText='';
+    this.specialZoomPulse=0;
     this.bindInput();this.resize();
     this.loadAssets();
   }
@@ -1609,6 +1611,7 @@ class DharmYudhGame {
     this.gameTime=0;this.battleTimer=this.maxBattleTime;
     this.screenShake=0;this.particles.clear();this.flashEffect=0;this.koFlash=0;
     this.hitStopTimer=0;this.slowMo=0;this.damageNumbers=[];
+    this.koFreezeTimer=0;this.koFreezeText='';
     this.cinematicZoom=0;this.cinematicZoomTarget=1;
     this.audio.setMusicIntensity(.3);
     this.showToast(`Round ${this.round} — FIGHT!`);
@@ -1626,6 +1629,12 @@ class DharmYudhGame {
     // Camera zoom transition
     this.cinematicZoom+=(this.cinematicZoomTarget-this.cinematicZoom)*.05;
     
+    // Special zoom pulse — slight shake during charge
+    if(this.specialZoomPulse>0){
+      this.specialZoomPulse-=dt;
+      this.camera.shake(2+Math.sin(this.gameTime*50)*2);
+    }
+    
     // Screen shake
     if(this.screenShake>.3){
       this.camera.shake(this.screenShake);
@@ -1635,8 +1644,15 @@ class DharmYudhGame {
     if(this.flashEffect>0)this.flashEffect-=dt*3;
     if(this.koFlash>0)this.koFlash-=dt*2;
     
-    // Hit stop
+    // Hit stop (stop game updates)
     if(this.hitStopTimer>0){this.hitStopTimer-=dt;return;}
+    
+    // KO freeze frame — dramatic pause on death
+    if(this.koFreezeTimer>0){
+      this.koFreezeTimer-=dt;
+      this.camera.zoomTo(.85+Math.sin(this.koFreezeTimer*8)*.03);
+      return;
+    }
     
     if(this.toastTimer>0)this.toastTimer-=dt;
     if(this.roundIntroTimer>0){this.roundIntroTimer-=dt;return;}
@@ -1936,6 +1952,10 @@ class DharmYudhGame {
         if(defender.currentHp<=0&&!defender.died){
           defender.died=true;this.particles.deathBurst(defender.x,defender.y-30);
           this.screenShake=25;this.audio.playSfx('death');this.slowMo=.4;this.koFlash=1.5;
+          this.hitStopTimer=.4;this.koFreezeTimer=.8;
+          this.koFreezeText='K.O.!';
+          this.camera.zoomTo(.75);
+          setTimeout(()=>{if(this.state==='battle')this.camera.zoomTo(1);},900);
         }
       }
       attacker.attacking=false;
@@ -1948,7 +1968,13 @@ class DharmYudhGame {
     user.specialActive=true;user.specialTimer=.6;user.attacking=true;
     const ch=(user===this.player)?this.playerChar:this.enemyChar;
     if(ch&&ch.specialEffect)ch.specialEffect(this,user.x,user.y-30,user.facing);
-    this.cinematicZoomTarget=.9;
+    // Dramatic zoom pulse before the hit
+    this.specialZoomPulse=.5;
+    this.cinematicZoomTarget=.75;
+    this.slowMo=.15;
+    setTimeout(()=>{
+      if(this.state==='battle'){this.cinematicZoomTarget=1;this.specialZoomPulse=0;}
+    },600);
     setTimeout(()=>{
       if(!this.battleActive||user.died||!this.roundActive){user.attacking=false;return;}
       const dist=Math.abs(user.x-target.x);
@@ -1963,7 +1989,7 @@ class DharmYudhGame {
         this.slowMo=.25;
         this.particles.hitSparks(target.x,target.y-20,'#ffffff');
         this.audio.playSfx('hit',1.5);
-        if(target.currentHp<=0&&!target.died){target.died=true;this.particles.deathBurst(target.x,target.y-30);this.screenShake=30;this.koFlash=2;this.slowMo=.6;this.audio.playSfx('death');this.audio.playSfx('ko');}
+        if(target.currentHp<=0&&!target.died){target.died=true;this.particles.deathBurst(target.x,target.y-30);this.screenShake=30;this.koFlash=2;this.slowMo=.6;this.audio.playSfx('death');this.audio.playSfx('ko');this.hitStopTimer=.5;this.koFreezeTimer=1.0;this.koFreezeText='K.O.!';this.camera.zoomTo(.7);setTimeout(()=>{if(this.state==='battle')this.camera.zoomTo(1);},1100);}
       }
       user.attacking=false;
     },450);
@@ -2152,6 +2178,21 @@ class DharmYudhGame {
     for(const{e,c}of es)this.drawEntity(ctx,e,c);
     this.drawDamageNumbers(ctx);
     this.particles.draw(ctx);
+    // KO freeze overlay
+    if(this.koFreezeTimer>0){
+      const koa=Math.min(this.koFreezeTimer*3,1);
+      ctx.save();ctx.globalAlpha=koa;
+      ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(0,0,CONFIG.W,CONFIG.H);
+      ctx.textAlign='center';
+      ctx.shadowColor='#ff0000';ctx.shadowBlur=50;
+      ctx.font='bold 100px Orbitron,sans-serif';
+      ctx.fillStyle='#ffffff';ctx.fillText(this.koFreezeText,CONFIG.W/2,CONFIG.H/2-40);
+      ctx.shadowColor='#ff4400';ctx.shadowBlur=30;
+      ctx.font='bold 36px Rajdhani,sans-serif';
+      ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillText('FATALITY',CONFIG.W/2,CONFIG.H/2+40);
+      ctx.shadowBlur=0;
+      ctx.restore();
+    }
     this.drawHUD(ctx);
     
     // Round intro overlay
@@ -2204,6 +2245,15 @@ class DharmYudhGame {
   drawEntity(ctx,entity,charData){
     if(!entity||!charData)return;
     ctx.save();
+    // Weapon trail particles while attacking
+    if(entity.attacking&&entity.attackFrame>0&&entity.attackFrame<4){
+      const trailColor=charData.color||'#ffd700';
+      this.particles.emit(entity.x+entity.facing*20,entity.y-30,{
+        count:2,type:'spark',speed:80,life:.15,size:3,
+        angle:entity.facing>0?0:Math.PI,spread:.5,
+        color:[trailColor,'#ffffff'],gravity:0,drag:.97,
+      });
+    }
     // Shadow
     const ss=1-(CONFIG.GROUND_Y-entity.y)/200;
     ctx.fillStyle='rgba(0,0,0,.22)';
@@ -2267,6 +2317,20 @@ class DharmYudhGame {
     ctx.fillStyle='#42a5f5';ctx.fillRect(pBX,enY,pBW*(this.player.energy/this.player.maxEnergy),enB);
     ctx.fillStyle='rgba(255,255,255,.18)';ctx.font='9px Rajdhani,sans-serif';
     ctx.fillText('ENERGY',pBX+3,enY+7);
+    // Flash effect when energy >= SPECIAL_COST
+    if(this.player.energy>=CONFIG.SPECIAL_COST){
+      const pulse=.3+Math.sin(this.gameTime*8)*.2;
+      ctx.save();
+      ctx.shadowColor='#42a5f5';ctx.shadowBlur=15+Math.sin(this.gameTime*6)*8;
+      ctx.fillStyle=`rgba(255,255,255,${pulse*.15})`;
+      ctx.fillRect(pBX-2,enY-2,pBW+4,enB+4);
+      ctx.shadowBlur=0;
+      ctx.fillStyle=`rgba(66,165,245,${pulse*.2})`;
+      ctx.fillRect(pBX,enY,pBW,enB);
+      ctx.fillStyle='rgba(255,255,255,.25)';ctx.font='9px Rajdhani,sans-serif';
+      ctx.fillText('ENERGY FULL!',pBX+3,enY+7);
+      ctx.restore();
+    }
     
     if(this.player.comboCount>1){
       ctx.textAlign='left';ctx.fillStyle='#ffd700';ctx.font='bold 30px Rajdhani,sans-serif';
