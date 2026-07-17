@@ -212,6 +212,14 @@ export class DharmYudhGame {
 
   confirmCharacter() {
     this.playerChar = CHARACTERS[this.selectedChar];
+
+    // Check if character is locked
+    const locked = this.storage.data.progression.unlocks.lockedCharacters;
+    if (locked.includes(this.playerChar.id)) {
+      this.audio.playSfx('death');
+      this.showToast('WARRIOR IS LOCKED! BEAT ARCADE TO UNLOCK.');
+      return;
+    }
     
     if (this.gameMode === 'story') {
       this.story.startCampaign(this.playerChar.id);

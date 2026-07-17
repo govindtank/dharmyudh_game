@@ -1585,6 +1585,8 @@ class DharmYudhGame {
       ...charData.stats,
       stats: charData.stats,
       currentHp:charData.stats.hp,
+      displayHp:charData.stats.hp,
+      damageHp:charData.stats.hp,
       x:baseX,y:CONFIG.GROUND_Y,w:80,h:120,
       facing:isPlayer?1:-1,state:'idle',stateTimer:0,animFrame:0,
       attacking:false,attackType:'light',attackFrame:0,attackCooldown:0,
@@ -1719,6 +1721,10 @@ class DharmYudhGame {
       entity.rageTimer-=dt;
       if(entity.rageTimer<=0)entity.rageActive=false;
     }
+    
+    // Smooth HP bar animation — displayHp follows currentHp quickly, damageHp lags behind
+    entity.displayHp += (entity.currentHp - entity.displayHp) * Math.min(1, dt * 10);
+    entity.damageHp += (entity.currentHp - entity.damageHp) * Math.min(1, dt * 3);
     
     // Hitstun
     if(entity.hitstun>0){
@@ -2392,13 +2398,27 @@ class DharmYudhGame {
     ctx.fillStyle=this.playerChar.color;
     ctx.font='bold 22px Rajdhani,sans-serif';
     ctx.fillText(this.playerChar.name,pBX,pBY);
+    // Character portrait
+    ctx.save();
+    ctx.beginPath();ctx.rect(pBX-34,pBY-8,30,36);ctx.clip();
+    this.playerChar.draw(ctx,pBX-19,pBY+12,24,32,1,this.animFrame*2,{attacking:false,specialActive:false},false);
+    ctx.restore();
+    ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;
+    ctx.strokeRect(pBX-34,pBY-8,30,36);
     ctx.fillStyle='rgba(255,255,255,.35)';ctx.font='14px Rajdhani,sans-serif';
     ctx.fillText(`${Math.ceil(this.player.currentHp)} / ${this.player.stats.hp}`,pBX+pBW-70,pBY);
     const hpY=pBY+14,hpB=18;
     ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(pBX,hpY,pBW,hpB);
     const hpR=this.player.currentHp/this.player.stats.hp;
+    const displayR=this.player.displayHp/this.player.stats.hp;
+    const damageR=this.player.damageHp/this.player.stats.hp;
     const hpC=hpR>.5?'#66bb6a':hpR>.25?'#ffa726':'#ef5350';
-    ctx.fillStyle=hpC;ctx.fillRect(pBX,hpY,pBW*hpR,hpB);
+    // Damage preview bar (lags behind actual HP — shows recent damage taken)
+    if(damageR>displayR){
+      ctx.fillStyle='rgba(255,255,255,.12)';
+      ctx.fillRect(pBX,hpY,pBW*damageR,hpB);
+    }
+    ctx.fillStyle=hpC;ctx.fillRect(pBX,hpY,pBW*displayR,hpB);
     const sg=ctx.createLinearGradient(pBX,hpY,pBX,hpY+hpB);
     sg.addColorStop(0,'rgba(255,255,255,.15)');sg.addColorStop(.5,'rgba(255,255,255,.05)');sg.addColorStop(1,'rgba(0,0,0,.1)');
     ctx.fillStyle=sg;ctx.fillRect(pBX,hpY,pBW,hpB);
@@ -2439,13 +2459,26 @@ class DharmYudhGame {
     ctx.textAlign='right';ctx.fillStyle=this.enemyChar.color;
     ctx.font='bold 22px Rajdhani,sans-serif';
     ctx.fillText(this.enemyChar.name,CONFIG.W-20,50);
+    // Enemy character portrait (mirrored)
+    ctx.save();
+    ctx.beginPath();ctx.rect(CONFIG.W-20-pBW+4,pBY-8,30,36);ctx.clip();
+    this.enemyChar.draw(ctx,CONFIG.W-20-pBW+19,pBY+12,24,32,-1,this.animFrame*2,{attacking:false,specialActive:false},false);
+    ctx.restore();
+    ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;
+    ctx.strokeRect(CONFIG.W-20-pBW+4,pBY-8,30,36);
     ctx.fillStyle='rgba(255,255,255,.35)';ctx.font='14px Rajdhani,sans-serif';
     ctx.fillText(`${Math.ceil(this.enemy.currentHp)} / ${this.enemy.stats.hp}`,eBX+70,50);
     const eHpY=64;
     ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(eBX,eHpY,pBW,hpB);
     const eHpR=this.enemy.currentHp/this.enemy.stats.hp;
+    const eDisplayR=this.enemy.displayHp/this.enemy.stats.hp;
+    const eDamageR=this.enemy.damageHp/this.enemy.stats.hp;
     const eHpC=eHpR>.5?'#66bb6a':eHpR>.25?'#ffa726':'#ef5350';
-    ctx.fillStyle=eHpC;ctx.fillRect(eBX,eHpY,pBW*eHpR,hpB);
+    if(eDamageR>eDisplayR){
+      ctx.fillStyle='rgba(255,255,255,.12)';
+      ctx.fillRect(eBX,eHpY,pBW*eDamageR,hpB);
+    }
+    ctx.fillStyle=eHpC;ctx.fillRect(eBX,eHpY,pBW*eDisplayR,hpB);
     const esg=ctx.createLinearGradient(eBX,eHpY,eBX,eHpY+hpB);
     esg.addColorStop(0,'rgba(255,255,255,.15)');esg.addColorStop(.5,'rgba(255,255,255,.05)');esg.addColorStop(1,'rgba(0,0,0,.1)');
     ctx.fillStyle=esg;ctx.fillRect(eBX,eHpY,pBW,hpB);
@@ -2484,37 +2517,80 @@ class DharmYudhGame {
   drawResult(ctx){
     ctx.save();
     const won=this.matchWinner==='player';
-    ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(0,0,CONFIG.W,CONFIG.H);
-    if(won&&Math.random()<.08)this.particles.emit(Math.random()*CONFIG.W,-10,{count:3,type:'sparkle',speed:100,life:1.5,angle:Math.PI/2,color:['#ffd700','#ffffff','#ff6b35'],gravity:50});
-    const bx=CONFIG.W/2-240,by=CONFIG.H/2-130,bw=480,bh=260;
-    ctx.shadowColor=won?'rgba(255,215,0,.3)':'rgba(255,0,0,.3)';ctx.shadowBlur=40;
-    ctx.fillStyle='rgba(10,10,20,.95)';ctx.fillRect(bx,by,bw,bh);
-    ctx.shadowBlur=0;
-    ctx.strokeStyle=won?'rgba(255,215,0,.35)':'rgba(255,50,50,.35)';ctx.lineWidth=2;
-    ctx.strokeRect(bx,by,bw,bh);
-    ctx.textAlign='center';
+    const winnerChar=won?this.playerChar:this.enemyChar;
+    const loserChar=won?this.enemyChar:this.playerChar;
+    const primColor=winnerChar.color||'#ffd700';
+    
+    // Dark overlay with radial gradient
+    const overlayG=ctx.createRadialGradient(CONFIG.W/2,CONFIG.H/2,0,CONFIG.W/2,CONFIG.H/2,500);
+    overlayG.addColorStop(0,won?'rgba(20,10,0,.85)':'rgba(10,0,0,.85)');
+    overlayG.addColorStop(1,'rgba(0,0,0,.92)');
+    ctx.fillStyle=overlayG;ctx.fillRect(0,0,CONFIG.W,CONFIG.H);
+    
+    // Victory confetti & sparkle effects
     if(won){
-      ctx.fillStyle='#ffd700';ctx.font='bold 60px Orbitron,sans-serif';
-      ctx.shadowColor='#ffd700';ctx.shadowBlur=30;
-      ctx.fillText('VICTORY!',CONFIG.W/2,by+85);
-      ctx.shadowBlur=0;
-      ctx.fillStyle='rgba(255,255,255,.7)';ctx.font='22px Rajdhani,sans-serif';
-      ctx.fillText(`${this.playerChar.name} triumphs over ${this.enemyChar.name}!`,CONFIG.W/2,by+135);
-      ctx.fillStyle='rgba(255,200,100,.35)';ctx.font='17px Rajdhani,sans-serif';
-      ctx.fillText(`"${this.playerChar.taunt}"`,CONFIG.W/2,by+170);
-      ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='16px Noto Sans Devanagari,sans-serif';
-      ctx.fillText('धर्मो रक्षति रक्षितः',CONFIG.W/2,by+205);
+      if(Math.random()<.15)this.particles.emit(Math.random()*CONFIG.W,-10,{count:4,type:'sparkle',speed:120+rng(0,80),life:1.8+rng(0,.5),angle:Math.PI/2+rng(-.3,.3),color:['#ffd700','#ffffff','#ff6b35','#ff4400','#4fc3f7'],gravity:60});
+      if(Math.random()<.05)this.particles.emit(rng(0,CONFIG.W),-5,{count:8,type:'shard',speed:200+rng(0,100),life:2+rng(0,1),angle:Math.PI/2+rng(-.4,.4),color:['#ffd700','#ff7043','#4fc3f7','#66bb6a','#ab47bc'],gravity:120});
     }else{
-      ctx.fillStyle='#ff4444';ctx.font='bold 60px Orbitron,sans-serif';
-      ctx.shadowColor='#ff0000';ctx.shadowBlur=25;
-      ctx.fillText('DEFEATED',CONFIG.W/2,by+85);
+      // Defeat embers
+      if(Math.random()<.08)this.particles.emit(rng(0,CONFIG.W),CONFIG.GROUND_Y,{count:2,type:'smoke',speed:30,life:1.5,size:15,spread:.3,color:'#444',gravity:-20});
+    }
+    
+    // Large winner character silhouette (translucent, side)
+    ctx.save();
+    ctx.globalAlpha=.2;
+    const sideX=won?110:CONFIG.W-110;
+    ctx.translate(sideX,CONFIG.H/2+20);
+    ctx.scale(5.5,5.5);
+    winnerChar.draw(ctx,0,0,30,50,won?1:-1,this.animFrame*3,{attacking:false,specialActive:true},false);
+    ctx.restore();
+    
+    // Result panel with rounded corners
+    const bx=CONFIG.W/2-240,by=CONFIG.H/2-140,bw=480,bh=280;
+    ctx.shadowColor=won?'rgba(255,215,0,.4)':'rgba(255,0,0,.4)';ctx.shadowBlur=50;
+    ctx.fillStyle='rgba(10,10,20,.95)';ctx.beginPath();
+    ctx.roundRect(bx,by,bw,bh,8);ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.strokeStyle=won?'rgba(255,215,0,.4)':'rgba(255,50,50,.4)';ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.roundRect(bx,by,bw,bh,8);ctx.stroke();
+    
+    // Inner glow gradient
+    const ig=ctx.createLinearGradient(bx,by,bx+bw,by);
+    ig.addColorStop(0,won?'rgba(255,215,0,.06)':'rgba(255,0,0,.06)');
+    ig.addColorStop(.5,'transparent');
+    ig.addColorStop(1,won?'transparent':'rgba(255,0,0,.06)');
+    ctx.fillStyle=ig;ctx.beginPath();ctx.roundRect(bx,by,bw,bh,8);ctx.fill();
+    
+    ctx.textAlign='center';
+    
+    if(won){
+      // VICTORY with gentle pulse
+      const pulse=1+Math.sin(this.gameTime*2)*.025;
+      ctx.save();
+      ctx.translate(CONFIG.W/2,by+72);
+      ctx.scale(pulse,pulse);
+      ctx.fillStyle=primColor;ctx.font='bold 56px Orbitron,sans-serif';
+      ctx.shadowColor=primColor;ctx.shadowBlur=40;
+      ctx.fillText('VICTORY!',0,0);
+      ctx.restore();
       ctx.shadowBlur=0;
-      ctx.fillStyle='rgba(255,255,255,.6)';ctx.font='22px Rajdhani,sans-serif';
-      ctx.fillText(`${this.enemyChar.name} prevails this time...`,CONFIG.W/2,by+135);
+      ctx.fillStyle='rgba(255,255,255,.75)';ctx.font='21px Rajdhani,sans-serif';
+      ctx.fillText(`${this.playerChar.name} triumphs over ${this.enemyChar.name}!`,CONFIG.W/2,by+128);
+      ctx.fillStyle='rgba(255,215,0,.4)';ctx.font='17px Rajdhani,sans-serif';
+      ctx.fillText(`\"${this.playerChar.taunt}\"`,CONFIG.W/2,by+163);
+      ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='16px Noto Sans Devanagari,sans-serif';
+      ctx.fillText('धर्मो रक्षति रक्षितः',CONFIG.W/2,by+198);
+    }else{
+      ctx.fillStyle='#ff4444';ctx.font='bold 56px Orbitron,sans-serif';
+      ctx.shadowColor='#ff0000';ctx.shadowBlur=35;
+      ctx.fillText('DEFEATED',CONFIG.W/2,by+72);
+      ctx.shadowBlur=0;
+      ctx.fillStyle='rgba(255,255,255,.65)';ctx.font='21px Rajdhani,sans-serif';
+      ctx.fillText(`${this.enemyChar.name} prevails this time...`,CONFIG.W/2,by+128);
       ctx.fillStyle='rgba(255,200,100,.25)';ctx.font='17px Rajdhani,sans-serif';
-      ctx.fillText(`"${this.enemyChar.taunt}"`,CONFIG.W/2,by+170);
-      ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='16px Rajdhani,sans-serif';
-      ctx.fillText('Train harder and return to the battlefield!',CONFIG.W/2,by+205);
+      ctx.fillText(`\"${this.enemyChar.taunt}\"`,CONFIG.W/2,by+163);
+      ctx.fillStyle='rgba(255,255,255,.22)';ctx.font='16px Rajdhani,sans-serif';
+      ctx.fillText('Train harder and return to the battlefield!',CONFIG.W/2,by+198);
     }
     if(this.gameMode==='survival'){
       ctx.fillStyle='rgba(255,200,100,.35)';ctx.font='16px Rajdhani,sans-serif';
