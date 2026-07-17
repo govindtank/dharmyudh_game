@@ -322,7 +322,7 @@ const ANIM = {
   hitstun: (f) => ({ stagger: Math.sin(f*.15)*.1, lean: -.08 }),
   knockdown: (f) => {
     const t=Math.min(f/20,1);
-    return {yOffset:-t*60,rotation:-t*.8*p,alpha:1-t};
+    return {yOffset:-t*60,rotation:-t*.8*Math.PI,alpha:1-t};
   },
 };
 
@@ -947,7 +947,7 @@ const CHARACTERS = [
       
       // Nose & mouth
       ctx.fillStyle=c.skinShadow;
-      ctx.beginPath();ctx.moveTo(0,headY+w+.02);ctx.lineTo(-w*.03,headY+w*.06);ctx.lineTo(w*.03,headY+w*.06);ctx.closePath();ctx.fill();
+      ctx.beginPath();ctx.moveTo(0,headY+w*.02);ctx.lineTo(-w*.03,headY+w*.06);ctx.lineTo(w*.03,headY+w*.06);ctx.closePath();ctx.fill();
       ctx.strokeStyle='#8a6a4a';ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(-w*.05,headY+w*.09);ctx.lineTo(w*.05,headY+w*.09);ctx.stroke();
       
@@ -1582,7 +1582,9 @@ class DharmYudhGame {
   createEntity(charData,isPlayer){
     const baseX=isPlayer?180:CONFIG.W-180;
     return{
-      ...charData.stats,currentHp:charData.stats.hp,
+      ...charData.stats,
+      stats: charData.stats,
+      currentHp:charData.stats.hp,
       x:baseX,y:CONFIG.GROUND_Y,w:80,h:120,
       facing:isPlayer?1:-1,state:'idle',stateTimer:0,animFrame:0,
       attacking:false,attackType:'light',attackFrame:0,attackCooldown:0,
@@ -1593,6 +1595,7 @@ class DharmYudhGame {
       dodgeTimer:0,dodgeCooldown:0,comboCount:0,comboTimer:0,
       lastX:baseX,moveIntent:0,tauntTimer:0,damageDealt:0,
       hitstun:0,walking:false,
+      rageActive:false,rageTimer:0,rageUsed:false,parryFrames:0,airJuggleCount:0,
       // AI state
       aiState:'approach',aiTimer:0,aiLastAction:'',aiComboChain:0,aiOppLastAttacking:false,aiPunishWindow:0,
     };
@@ -1694,10 +1697,28 @@ class DharmYudhGame {
     entity.invincible=entity.invTimer>0;
     entity.hitstun=Math.max(0,entity.hitstun-dt);
     entity.dodgeCooldown=Math.max(0,entity.dodgeCooldown-dt);
-    entity.energy=Math.min(entity.maxEnergy,entity.energy+CONFIG.ENERGY_REGEN*dt);
+    entity.energy=Math.min(entity.maxEnergy,entity.energy+CONFIG.ENERGY_REGEN*dt*(entity.rageActive?2.5:1));
     if(entity.specialActive){entity.specialTimer-=dt;if(entity.specialTimer<=0)entity.specialActive=false;}
     if(entity.comboTimer>0)entity.comboTimer-=dt;else entity.comboCount=0;
     if(entity.dodgeTimer>0)entity.dodgeTimer-=dt;
+    
+    // Parry tracking: first ~5 frames (80ms) of block = parry window
+    if(entity.blocking)entity.parryFrames++;else entity.parryFrames=0;
+    
+    // RAGE MODE: activate at ≤25% HP (once per round, after hitstun clears)
+    if(!entity.rageUsed&&entity.currentHp/entity.stats.hp<=0.25&&!entity.died&&entity.hitstun<=0){
+      if(!entity.rageActive){
+        entity.rageActive=true;entity.rageUsed=true;entity.rageTimer=8;
+        this.particles.specialBurst(entity.x,entity.y-30,'#ff0000');
+        this.screenShake=10;this.audio.playSfx('special',1.3);
+        this.flashEffect=.5;
+        this.damageNumbers.push({x:entity.x,y:entity.y-60,text:'RAGE!',color:'#ff0000',life:1.2,maxLife:1.2,vy:-120});
+      }
+    }
+    if(entity.rageActive){
+      entity.rageTimer-=dt;
+      if(entity.rageTimer<=0)entity.rageActive=false;
+    }
     
     // Hitstun
     if(entity.hitstun>0){
@@ -1712,7 +1733,7 @@ class DharmYudhGame {
       entity.y+=entity.velocityY*dt;
       if(entity.y>=CONFIG.GROUND_Y){
         entity.y=CONFIG.GROUND_Y;entity.velocityY=0;
-        if(!entity.grounded){entity.grounded=true;this.particles.land(entity.x,entity.y);this.audio.playSfx('land');}
+        if(!entity.grounded){entity.grounded=true;this.particles.land(entity.x,entity.y);this.audio.playSfx('land');entity.airJuggleCount=0;}
       }
     }
     entity.x+=entity.velocityX*dt;
@@ -1839,7 +1860,17 @@ class DharmYudhGame {
 
     // Block when opponent attacks at mid range
     if(opp.attacking&&dist<150&&roll<bc*.7&&entity.grounded){
-      entity.blocking=true;entity.blockTimer=.3+Math.random()*.25;
+      // AI parry chance on harder difficulties
+      const parryChance=this.difficulty==='hard'?.2:(this.difficulty==='normal'?.05:0);
+      if(dist<100&&roll<parryChance){
+        // AI initiates a parry by starting block just before hit connects
+        entity.blocking=true;entity.parryFrames=0;
+        entity.blockTimer=.2;entity.stateTimer=.4;entity.aiLastAction='parry';entity.aiTimer=.2;
+        // Visually indicate AI is parrying
+        this.particles.emit((entity.x+opp.x)/2,entity.y-20,{count:4,type:'ring',speed:0,life:.15,size:10,color:'#00ffff'});
+      }else{
+        entity.blocking=true;entity.blockTimer=.3+Math.random()*.25;
+      }
       entity.stateTimer=.4;entity.aiLastAction='block';entity.aiTimer=.15;return;
     }
 
@@ -1929,6 +1960,31 @@ class DharmYudhGame {
       const dist=Math.abs(attacker.x-defender.x);
       if(dist<hitDist&&!defender.invincible){
         let damage=isHeavy?attacker.attack*1.6+rng(0,4):attacker.attack+rng(0,3);
+        
+        // ── PARRY / RIPOSTE ──
+        // If defender started blocking within last ~5 frames (80ms), they parry!
+        if(defender.blocking&&defender.parryFrames<=5){
+          damage=0;defender.hitFlash=1;defender.blocking=false;
+          defender.invincible=true;defender.invTimer=.5;
+          // Stun the attacker, opening them for a counter
+          attacker.hitstun=.4;attacker.attacking=false;
+          attacker.velocityX=(attacker.x>defender.x?1:-1)*150;
+          // Visual & audio
+          this.particles.specialBurst((attacker.x+defender.x)/2,defender.y-20,'#00ffff');
+          this.particles.emit((attacker.x+defender.x)/2,defender.y-20,{count:12,type:'ring',speed:0,life:.4,size:15,color:'#00ffff'});
+          this.screenShake=10;this.hitStopTimer=.1;
+          this.audio.playSfx('block',.5);this.audio.playSfx('hit',1.5);
+          this.damageNumbers.push({x:defender.x,y:defender.y-50,text:'PARRY!',color:'#00ffff',life:.8,maxLife:.8,vy:-120});
+          defender.parryFrames=10; // prevent chain parry
+          defender.currentHp=Math.max(0,defender.currentHp-damage);
+          attacker.attacking=false;return;
+        }
+        
+        // ── RAGE DAMAGE BONUS ──
+        if(attacker.rageActive)damage*=1.3;
+        if(defender.rageActive)damage*=.85; // 15% damage reduction
+        
+        // ── BLOCK (normal) ──
         if(defender.blocking){
           damage*=.2;this.particles.hitSparks((attacker.x+defender.x)/2,defender.y-20,'#ffd700');
           this.audio.playSfx('block');defender.blocking=false;defender.hitstun=.1;
@@ -1945,6 +2001,23 @@ class DharmYudhGame {
           this.maxComboDisplay=Math.max(this.maxComboDisplay,attacker.comboCount);
           if(attacker.comboCount>1){damage*=1+(attacker.comboCount-1)*.07;}
           if(attacker.comboCount%3===0){this.audio.playSfx('combo');this.flashEffect=.3;}
+          
+          // ── AIR COMBO (JUGGLE) ──
+          if(!defender.grounded&&attacker.airJuggleCount<3){
+            attacker.airJuggleCount++;
+            // Pop defender back up for continued juggle
+            defender.velocityY=-280;defender.grounded=false;
+            defender.hitstun=.3;defender.velocityX=kd*20;
+            damage*=1.15; // juggle bonus
+            this.particles.hitSparks(defender.x,defender.y-30,'#00ccff');
+            this.damageNumbers.push({x:defender.x,y:defender.y-60,text:'AIR!',color:'#00ccff',life:.6,maxLife:.6,vy:-100});
+          }else if(!defender.grounded&&attacker.airJuggleCount>=3){
+            // Max juggle reached — hard knock down
+            defender.velocityY=-350;defender.velocityX=kd*120;
+            this.particles.heavyHitSparks(defender.x,defender.y-20);
+            this.screenShake=18;
+          }
+          
           this.damageNumbers.push({x:defender.x,y:defender.y-40,text:Math.ceil(damage).toString(),color:isHeavy?'#ff4400':'#ffd700',life:.8,maxLife:.8,vy:-80-rng(0,40)});
           attacker.damageDealt+=damage;
         }
@@ -1979,6 +2052,8 @@ class DharmYudhGame {
       if(!this.battleActive||user.died||!this.roundActive){user.attacking=false;return;}
       const dist=Math.abs(user.x-target.x);
       let damage=user.specialDmg+rng(0,10);
+      if(user.rageActive)damage*=1.25;
+      if(target.rageActive)damage*=.85;
       if(dist<220){
         if(target.blocking){damage*=.3;this.audio.playSfx('block');}
         else{this.hitStopTimer=.18;this.screenShake=22;}
@@ -2105,11 +2180,15 @@ class DharmYudhGame {
         ['← → or A/D','Move your warrior'],
         ['W or ↑','Jump / Air attack'],
         ['S or ↓','Dodge (invincibility frames)'],
-        ['J or Z','Light Attack (fast)'],
-        ['K or X','Heavy Attack (strong, knocks down)'],
+        ['J or Z','Light Attack (fast, air juggle)'],
+        ['K or X','Heavy Attack (strong, launches enemy)'],
         ['L or C','Special Move (costs 50 energy)'],
-        ['Shift (hold)','Block (reduces damage)'],
+        ['Shift (hold)','Block (tap to PARRY!)'],
         ['',''],
+        ['⭑ PARRY: Tap block at moment of impact to deflect & stun!'],
+        ['⭑ AIR COMBOS: Launch enemy (K) then hit them in the air (J)!'],
+        ['⭑ RAGE MODE: Below 25% HP — +30% ATK, -15% DMG taken!'],
+        [''],
         ['COMBOS: hit quickly for bonus damage!'],
         ['SURVIVAL: defeat waves of enemies!'],
       ];
@@ -2260,6 +2339,18 @@ class DharmYudhGame {
     ctx.beginPath();ctx.ellipse(entity.x,CONFIG.GROUND_Y+4,38*ss,8*ss,0,0,Math.PI*2);ctx.fill();
     // Dodge effect
     if(entity.dodgeTimer>0)ctx.globalAlpha=.5+Math.sin(entity.dodgeTimer*40)*.3;
+    // Rage aura
+    if(entity.rageActive){
+      const pulse=.2+Math.sin(this.gameTime*10)*.15;
+      ctx.shadowColor='#ff0000';ctx.shadowBlur=40+Math.sin(this.gameTime*8)*15;
+      ctx.strokeStyle=`rgba(255,50,50,${pulse})`;ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(entity.x,entity.y-entity.h/3,entity.w*.7,0,Math.PI*2);ctx.stroke();
+      ctx.shadowBlur=0;
+      // Inner rage glow
+      const rg=ctx.createRadialGradient(entity.x,entity.y-entity.h/3,0,entity.x,entity.y-entity.h/3,entity.w*.5);
+      rg.addColorStop(0,`rgba(255,0,0,${pulse*.12})`);rg.addColorStop(1,'transparent');
+      ctx.fillStyle=rg;ctx.beginPath();ctx.arc(entity.x,entity.y-entity.h/3,entity.w*.5,0,Math.PI*2);ctx.fill();
+    }
     const flash=entity.hitFlash>0;
     const st={attacking:entity.attacking,attackType:entity.attackType||'light',attackFrame:entity.attackFrame,specialActive:entity.specialActive,blocking:entity.blocking,hitstun:entity.hitstun,walking:entity.walking};
     charData.draw(ctx,entity.x,entity.y-entity.h/2,entity.w,entity.h,entity.facing,entity.animFrame,st,flash);
