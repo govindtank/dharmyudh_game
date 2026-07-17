@@ -154,6 +154,9 @@ export class DharmYudhGame {
 
       this.input.update();
 
+      // Show touch controls only during battle on mobile
+      this.input.setTouchControlsVisible(this.state === 'battle');
+
       // Keyboard hotkeys for difficulty toggle
       if (this.input.keyJustPressed['1']) { this.difficulty = 'easy'; this.showToast('Difficulty: Easy'); }
       if (this.input.keyJustPressed['2']) { this.difficulty = 'normal'; this.showToast('Difficulty: Normal'); }
@@ -241,6 +244,10 @@ export class DharmYudhGame {
     const stages = ['kurukshetra', 'indraprastha', 'hastinapura', 'celestial_realm', 'forest_of_dharma', 'bridge_of_lanka'];
     this.stage.setStage(stages[Math.floor(Math.random() * stages.length)]);
 
+    // Instantiate characters immediately for intro visuals
+    this.player = new BaseCharacter(this.playerChar, true);
+    this.enemy = new BaseCharacter(this.enemyChar, false);
+
     setTimeout(() => {
       if (this.state === 'battle') this.startRound();
     }, 2500);
@@ -314,11 +321,11 @@ export class DharmYudhGame {
         this.comboCount = 0;
       }
 
-      // Check Astra trigger hotkeys (Q for P1, P for P2)
-      if ((this.input.keyJustPressed['q'] || this.input.keyJustPressed['Q']) && Math.abs(this.combat.karma) === 100) {
+      // Check Astra trigger hotkeys (Special conditional state)
+      if (this.input.isActionJustPressed('Special', 1) && Math.abs(this.combat.karma) === 100 && this.player.energy >= CONFIG.SPECIAL_COST) {
         this.combat.triggerAstra(this.player);
       }
-      if ((this.input.keyJustPressed['p'] || this.input.keyJustPressed['P']) && Math.abs(this.combat.karma) === 100 && this.gameMode === 'versus2p') {
+      if (this.input.isActionJustPressed('Special', 2) && Math.abs(this.combat.karma) === 100 && this.gameMode === 'versus2p' && this.enemy.energy >= CONFIG.SPECIAL_COST) {
         this.combat.triggerAstra(this.enemy);
       }
 
@@ -391,6 +398,15 @@ export class DharmYudhGame {
       entity.velocityY += CONFIG.GRAVITY * dt;
     }
 
+    // Apply acceleration / friction towards targetVelocityX
+    if (entity.targetVelocityX !== undefined && !entity.attacking && entity.hitstun <= 0) {
+      const accel = entity.grounded ? 12 : 5; // Slippier in air
+      entity.velocityX += (entity.targetVelocityX - entity.velocityX) * accel * dt;
+    } else if (entity.hitstun <= 0 && !entity.attacking) {
+      // Natural friction if targetVelocityX isn't set (safety fallback)
+      entity.velocityX *= Math.pow(0.85, dt * 60);
+    }
+
     entity.x += entity.velocityX * dt;
     entity.y += entity.velocityY * dt;
 
@@ -412,18 +428,14 @@ export class DharmYudhGame {
 
     // Movement
     let speed = entity.speed;
-    entity.blocking = !!(this.input.keys['Shift'] && entity.grounded);
+    entity.blocking = !!(this.input.isActionPressed('Block', 1) && entity.grounded);
     if (entity.blocking) speed *= 0.5;
 
     let moveIntent = 0;
-    if (this.input.keys['ArrowLeft'] || this.input.keys['a'] || this.input.keys['A']) {
-      entity.x -= speed * dt;
-      moveIntent = -1;
-    }
-    if (this.input.keys['ArrowRight'] || this.input.keys['d'] || this.input.keys['D']) {
-      entity.x += speed * dt;
-      moveIntent = 1;
-    }
+    if (this.input.isActionPressed('MoveLeft', 1)) moveIntent = -1;
+    if (this.input.isActionPressed('MoveRight', 1)) moveIntent = 1;
+    
+    entity.targetVelocityX = moveIntent * speed;
 
     // Footsteps smoke particles
     if (moveIntent !== 0 && entity.grounded && Math.random() < 0.15) {
@@ -431,14 +443,14 @@ export class DharmYudhGame {
     }
 
     // Jump
-    if ((this.input.keyJustPressed['w'] || this.input.keyJustPressed['W'] || this.input.keyJustPressed['ArrowUp']) && entity.grounded) {
+    if (this.input.isActionJustPressed('Jump', 1) && entity.grounded) {
       entity.velocityY = -650;
       entity.grounded = false;
       this.audio.playSfx('jump', rng(0.85, 1.15));
     }
 
     // Dodge
-    if ((this.input.keyJustPressed['s'] || this.input.keyJustPressed['S'] || this.input.keyJustPressed['ArrowDown']) && entity.dodgeCooldown <= 0 && entity.grounded) {
+    if (this.input.isActionJustPressed('Dodge', 1) && entity.dodgeCooldown <= 0 && entity.grounded) {
       entity.dodgeTimer = 0.15;
       entity.dodgeCooldown = 0.6;
       entity.invTimer = 0.2;
@@ -447,13 +459,13 @@ export class DharmYudhGame {
     }
 
     // Attacks
-    if ((this.input.keyJustPressed['j'] || this.input.keyJustPressed['J'] || this.input.keyJustPressed['z'] || this.input.keyJustPressed['Z']) && entity.attackCooldown <= 0) {
+    if (this.input.isActionJustPressed('AttackLight', 1) && entity.attackCooldown <= 0) {
       this.performAttack(entity, opp, 'light');
     }
-    else if ((this.input.keyJustPressed['k'] || this.input.keyJustPressed['K'] || this.input.keyJustPressed['x'] || this.input.keyJustPressed['X']) && entity.attackCooldown <= 0) {
+    else if (this.input.isActionJustPressed('AttackHeavy', 1) && entity.attackCooldown <= 0) {
       this.performAttack(entity, opp, 'heavy');
     }
-    else if ((this.input.keyJustPressed['l'] || this.input.keyJustPressed['L'] || this.input.keyJustPressed['c'] || this.input.keyJustPressed['C']) && entity.specialCooldown <= 0 && entity.energy >= CONFIG.SPECIAL_COST) {
+    else if (this.input.isActionJustPressed('Special', 1) && entity.specialCooldown <= 0 && entity.energy >= CONFIG.SPECIAL_COST) {
       this.performSpecial(entity, opp);
     }
   }
@@ -478,9 +490,10 @@ export class DharmYudhGame {
 
     if (entity.aiState === 'approach') {
       const dir = opp.x > entity.x ? 1 : -1;
-      entity.x += dir * entity.speed * dt;
+      entity.targetVelocityX = dir * entity.speed;
     } 
     else if (entity.aiState === 'fight') {
+      entity.targetVelocityX = 0;
       // Choose attack type randomly
       if (Math.random() < 0.2 && entity.energy >= CONFIG.SPECIAL_COST && entity.specialCooldown <= 0) {
         this.performSpecial(entity, opp);
@@ -528,9 +541,6 @@ export class DharmYudhGame {
 
     entity.velocityX = entity.facing * 350;
     this.audio.playSfx('special');
-    
-    // Play full-screen special flash burst
-    this.renderer.triggerShake(12);
 
     let frame = 0;
     const interval = setInterval(() => {
@@ -587,7 +597,6 @@ export class DharmYudhGame {
       
       if (result.hit) {
         this.screenEffects.triggerHitStop(attacker.attackType);
-        this.renderer.triggerShake(attacker.attackType === 'special' ? 18 : 8);
 
         // Track and modify Dharma/Karma balance
         if (attacker === this.player) {

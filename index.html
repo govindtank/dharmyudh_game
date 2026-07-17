@@ -29,6 +29,28 @@
       <!-- Toast Messages (DOM-based for fallback) -->
       <div id="toast" class="toast"></div>
     </div>
+    <!-- Touch Controls (shown on mobile) -->
+    <div id="touch-controls" class="touch-controls" aria-hidden="true">
+      <div id="dpad" class="dpad">
+        <div class="dpad-btn dpad-up" data-touch="up">▲</div>
+        <div class="dpad-row">
+          <div class="dpad-btn dpad-left" data-touch="left">◀</div>
+          <div class="dpad-btn dpad-center" data-touch="">●</div>
+          <div class="dpad-btn dpad-right" data-touch="right">▶</div>
+        </div>
+        <div class="dpad-btn dpad-down" data-touch="down">▼</div>
+      </div>
+      <div class="btn-group">
+        <div class="action-btn btn-block" data-touch="block">🛡 BLOCK</div>
+        <div class="btn-col">
+          <div class="action-btn btn-special" data-touch="special">⚡</div>
+          <div class="btn-row">
+            <div class="action-btn btn-heavy" data-touch="heavy">⚔</div>
+            <div class="action-btn btn-light" data-touch="light">⚔</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="js/main.js"></script>

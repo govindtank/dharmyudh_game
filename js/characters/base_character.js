@@ -33,6 +33,7 @@ export class BaseCharacter {
     
     this.velocityX = 0;
     this.velocityY = 0;
+    this.targetVelocityX = 0;
     this.grounded = true;
     this.facing = isPlayer ? 1 : -1;
 
@@ -85,8 +86,7 @@ export class BaseCharacter {
 
     if (this.hitstun > 0) {
       this.state = 'hitstun';
-      // Apply decelerating knockback
-      this.x += this.velocityX * dt;
+      // Apply decelerating knockback (only modify velocity here, position updated in core physics)
       this.velocityX *= Math.pow(0.85, dt * 60);
       return;
     }

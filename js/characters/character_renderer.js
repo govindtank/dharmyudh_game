@@ -2,7 +2,7 @@
 // DHARMYUDH - Detailed Character Renderer (Skeletal/Joint-Based)
 // ============================================================
 
-import { lerp, clamp } from '../engine/config.js';
+import { CONFIG, lerp, clamp } from '../engine/config.js';
 
 export class CharacterRenderer {
   constructor(animEngine) {
@@ -22,15 +22,23 @@ export class CharacterRenderer {
 
     ctx.save();
     
+    // Global transparency
+    ctx.globalAlpha = pose.alpha;
+
+    // Draw dynamic drop shadow (scales based on height)
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    const shadowScale = clamp(1 - (CONFIG.GROUND_Y - entity.y) * 0.005, 0.2, 1);
+    ctx.beginPath();
+    ctx.ellipse(entity.x, CONFIG.GROUND_Y, 35 * shadowScale, 8 * shadowScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    
     // Position character center pivot
     ctx.translate(entity.x, entity.y);
     ctx.scale(entity.facing * pose.scaleX, pose.scaleY);
-    
     // Apply general hit-flash styling
     let isFlashing = entity.hitFlash > 0;
-
-    // Global transparency
-    ctx.globalAlpha = pose.alpha;
 
     // Retrieve warrior colors
     const colors = entity.colors || {
@@ -147,9 +155,9 @@ export class CharacterRenderer {
     ctx.fillRect(-22, ny, 44, 12);
 
     // Torso Base (Chest & Abdomen)
-    const chestGrad = ctx.createLinearGradient(-20, ny, 20, hy);
-    chestGrad.addColorStop(0, colors.cloth);
-    chestGrad.addColorStop(1, colors.clothLight);
+    const chestGrad = ctx.createRadialGradient(0, ny + 20, 5, 0, ny + 20, 35);
+    chestGrad.addColorStop(0, colors.clothLight);
+    chestGrad.addColorStop(1, colors.cloth);
     ctx.fillStyle = chestGrad;
     ctx.fillRect(-20, ny + 10, 40, hy - ny - 10);
 
@@ -208,7 +216,10 @@ export class CharacterRenderer {
     ctx.fillRect(-8, 0, 16, 6);
 
     // Upper Arm (Skin)
-    ctx.fillStyle = colors.skin;
+    const armGrad = ctx.createLinearGradient(-6, 0, 6, 0);
+    armGrad.addColorStop(0, colors.skinLight || colors.skin);
+    armGrad.addColorStop(1, colors.skinShadow);
+    ctx.fillStyle = armGrad;
     ctx.fillRect(-6, 6, 12, 14);
 
     // Elbow Joint (Wrist Band / Kangan)
@@ -216,7 +227,7 @@ export class CharacterRenderer {
     ctx.fillRect(-5, 20, 10, 5);
 
     // Forearm
-    ctx.fillStyle = colors.skin;
+    ctx.fillStyle = armGrad;
     ctx.fillRect(-4, 25, 8, 12);
 
     ctx.restore();
@@ -246,7 +257,10 @@ export class CharacterRenderer {
     ctx.fillRect(-7, 24, 14, 4);
 
     // Lower Leg (Skin)
-    ctx.fillStyle = colors.skin;
+    const legGrad = ctx.createLinearGradient(-6, 0, 6, 0);
+    legGrad.addColorStop(0, colors.skinLight || colors.skin);
+    legGrad.addColorStop(1, colors.skinShadow);
+    ctx.fillStyle = legGrad;
     ctx.fillRect(-6, 28, 12, 18);
 
     // Golden Anklet (Payal)
@@ -254,7 +268,7 @@ export class CharacterRenderer {
     ctx.fillRect(-6, 42, 12, 3);
 
     // Foot
-    ctx.fillStyle = colors.skin;
+    ctx.fillStyle = legGrad;
     ctx.fillRect(-6, 45, 14, 7);
 
     ctx.restore();

@@ -18,6 +18,8 @@ export class InputSystem {
     this.bindKeyboard();
     this.bindMouseAndTouch();
     this.bindGamepads();
+    this.isMobile = this.detectMobile();
+    this.bindTouchControls();
   }
 
   bindKeyboard() {
@@ -77,6 +79,81 @@ export class InputSystem {
 
   scanGamepads() {
     this.gamepads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
+  }
+
+  detectMobile() {
+    return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      || (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
+  }
+
+  bindTouchControls() {
+    const touchControls = document.getElementById('touch-controls');
+    if (!touchControls) return;
+
+    // Force hidden initially
+    touchControls.setAttribute('aria-hidden', 'true');
+
+    const keyMap = {
+      'up':    { key: 'ArrowUp',    mode: 'just' },
+      'down':  { key: 'ArrowDown',  mode: 'just' },
+      'left':  { key: 'ArrowLeft',  mode: 'hold' },
+      'right': { key: 'ArrowRight', mode: 'hold' },
+      'light': { key: 'j', mode: 'just' },
+      'heavy': { key: 'k', mode: 'just' },
+      'special': { key: 'l', mode: 'just' },
+      'block': { key: 'Shift', mode: 'hold' },
+    };
+
+    const handleStart = (action) => {
+      const m = keyMap[action];
+      if (!m) return;
+      if (m.mode === 'just') {
+        this.keyJustPressed[m.key] = true;
+        this.keys[m.key] = true;
+        this.addToBuffer(m.key, 'press');
+      } else {
+        this.keys[m.key] = true;
+      }
+    };
+
+    const handleEnd = (action) => {
+      const m = keyMap[action];
+      if (!m) return;
+      this.keys[m.key] = false;
+    };
+
+    const buttons = touchControls.querySelectorAll('[data-touch]');
+    buttons.forEach(btn => {
+      const action = btn.getAttribute('data-touch');
+      if (!action) return;
+
+      btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        btn.classList.add('active');
+        handleStart(action);
+      }, { passive: false });
+
+      btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        btn.classList.remove('active');
+        handleEnd(action);
+      }, { passive: false });
+
+      btn.addEventListener('touchcancel', () => {
+        btn.classList.remove('active');
+        handleEnd(action);
+      });
+    });
+  }
+
+  setTouchControlsVisible(visible) {
+    const el = document.getElementById('touch-controls');
+    if (!el) return;
+    if (visible && this.isMobile) {
+      el.setAttribute('aria-hidden', 'false');
+    } else {
+      el.setAttribute('aria-hidden', 'true');
+    }
   }
 
   update() {

@@ -41,15 +41,15 @@ export class UISystem {
 
     // Main Menu State inputs
     if (this.game.state === 'menu') {
-      if (this.game.input.keyJustPressed['ArrowUp']) {
+      if (this.game.input.keyJustPressed['ArrowUp'] || this.game.input.keyJustPressed['w'] || this.game.input.keyJustPressed['W']) {
         this.selectedMenuItem = (this.selectedMenuItem - 1 + this.menuItems.length) % this.menuItems.length;
         this.game.audio.playSfx('select', 0.85);
       }
-      if (this.game.input.keyJustPressed['ArrowDown']) {
+      if (this.game.input.keyJustPressed['ArrowDown'] || this.game.input.keyJustPressed['s'] || this.game.input.keyJustPressed['S']) {
         this.selectedMenuItem = (this.selectedMenuItem + 1) % this.menuItems.length;
         this.game.audio.playSfx('select', 0.85);
       }
-      if (this.game.input.keyJustPressed['Enter']) {
+      if (this.game.input.keyJustPressed['Enter'] || this.game.input.keyJustPressed[' ']) {
         this.confirmMenuSelection();
       }
 
@@ -314,10 +314,19 @@ export class UISystem {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ff8f00';
     ctx.font = 'bold 15px Rajdhani';
-    ctx.fillText('◄  CLICK LEFT/RIGHT SIDE TO NAVIGATE  ►', CONFIG.W / 2, CONFIG.H - 55);
+    ctx.fillText('◄  CLICK LEFT/RIGHT SIDE TO NAVIGATE  ►', CONFIG.W / 2, CONFIG.H - 65);
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 13px Rajdhani';
-    ctx.fillText('PRESS ENTER OR CLICK MIDDLE TO CONFIRM  |  ESC TO RETURN', CONFIG.W / 2, CONFIG.H - 35);
+    ctx.fillText('PRESS ENTER OR CLICK MIDDLE TO CONFIRM  |  ESC TO RETURN', CONFIG.W / 2, CONFIG.H - 45);
+
+    // Control bindings preview
+    const binds = this.game.storage.getSettings().keyBindings;
+    const p1Controls = `P1: Move [${binds.MoveLeft.toUpperCase()},${binds.Jump.toUpperCase()},${binds.Dodge.toUpperCase()},${binds.MoveRight.toUpperCase()}] Atk [${binds.AttackLight.toUpperCase()},${binds.AttackHeavy.toUpperCase()}] Spc [${binds.Special.toUpperCase()}] Blk [${binds.Block.toUpperCase()}]`;
+    const p2Controls = this.game.gameMode === 'versus2p' ? `  ||  P2: Move [ARROWS] Atk [${binds.P2AttackLight},${binds.P2AttackHeavy}] Spc [${binds.P2Special}] Blk [${binds.P2Block}]` : '';
+    
+    ctx.fillStyle = '#4caf50';
+    ctx.font = 'bold 14px Rajdhani';
+    ctx.fillText(`CONTROLS: ${p1Controls}${p2Controls}`, CONFIG.W / 2, CONFIG.H - 20);
 
     ctx.restore();
   }

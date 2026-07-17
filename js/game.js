@@ -1694,6 +1694,9 @@ class DharmYudhGame {
     this.gameMode='versus';this.survivalWave=1;this.survivalKills=0;
     this.difficulty='normal';
     this.keys={};this.lastKeyPress=0;this.keyJustPressed={};
+    this.isMobile=this.detectMobile();
+    this.touchState={left:false,right:false,up:false,down:false,light:false,heavy:false,special:false,block:false,blockTap:false};
+    this.touchSwipeStart=null;
     this.selectedChar=0;
     this.menuItems=['Quick Battle','Survival Mode','How to Play'];
     this.selectedMenuItem=0;this.showingHelp=false;
@@ -1731,6 +1734,14 @@ class DharmYudhGame {
       else if(p<85)t.textContent='Preparing Kurukshetra...';
       else t.textContent='Blessing by Gods...';
     },200);
+  }
+  detectMobile(){
+    return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)||(navigator.maxTouchPoints>0&&window.innerWidth<1024);
+  }
+  setTouchVisible(v){
+    const el=document.getElementById('touch-controls');
+    if(!el)return;
+    el.setAttribute('aria-hidden',v&&this.isMobile?'false':'true');
   }
   bindInput(){
     document.addEventListener('keydown',e=>{
@@ -1780,6 +1791,34 @@ class DharmYudhGame {
       if(this.state==='battle'&&!this.battleActive&&!this.roundActive)this.startRound();
     },{passive:false});
     this.canvas.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    // Wire up DOM touch buttons for battle controls
+    const tc=document.getElementById('touch-controls');
+    if(!tc)return;
+    tc.setAttribute('aria-hidden','true');
+    const km={
+      'up':{k:'ArrowUp',m:'j'},'down':{k:'ArrowDown',m:'j'},
+      'left':{k:'ArrowLeft',m:'h'},'right':{k:'ArrowRight',m:'h'},
+      'light':{k:'j',m:'j'},'heavy':{k:'k',m:'j'},
+      'special':{k:'l',m:'j'},'block':{k:'Shift',m:'h'},
+    };
+    tc.querySelectorAll('[data-touch]').forEach(btn=>{
+      const a=btn.getAttribute('data-touch');
+      if(!a)return;const m=km[a];
+      if(!m)return;
+      btn.addEventListener('touchstart',e=>{
+        e.preventDefault();e.stopPropagation();
+        btn.classList.add('active');
+        if(m.m==='j'){this.keyJustPressed[m.k]=true;this.keys[m.k]=true;}
+        else{this.keys[m.k]=true;}
+      },{passive:false});
+      btn.addEventListener('touchend',e=>{
+        e.preventDefault();e.stopPropagation();
+        btn.classList.remove('active');this.keys[m.k]=false;
+      },{passive:false});
+      btn.addEventListener('touchcancel',()=>{
+        btn.classList.remove('active');this.keys[m.k]=false;
+      });
+    });
   }
   menuSelect(){
     switch(this.selectedMenuItem){
@@ -1867,6 +1906,8 @@ class DharmYudhGame {
     this.gameTime+=dt;this.titlePulse+=dt;
     this.particles.update(dt);this.background.update(dt);
     this.camera.update(dt);
+    // Show touch controls only during battle on mobile
+    if(this.animFrame%6===0)this.setTouchVisible(this.state==='battle'&&this.battleActive);
     
     // Camera zoom transition
     this.cinematicZoom+=(this.cinematicZoomTarget-this.cinematicZoom)*.05;
@@ -2552,7 +2593,8 @@ class DharmYudhGame {
       ctx.save();ctx.globalAlpha=Math.max(0,1-this.gameTime/6);
       ctx.fillStyle='rgba(255,255,255,.1)';ctx.font='12px Rajdhani,sans-serif';
       ctx.textAlign='center';
-      ctx.fillText('←→ Move | J Light | K Heavy | L Special | Shift Block | W Jump | S Dodge',CONFIG.W/2,CONFIG.H-12);
+      const hint=this.isMobile?'Use on-screen controls to fight!':'←→ Move | J Light | K Heavy | L Special | Shift Block | W Jump | S Dodge';
+      ctx.fillText(hint,CONFIG.W/2,CONFIG.H-12);
       ctx.restore();
     }
   }
