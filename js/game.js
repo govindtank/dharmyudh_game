@@ -1970,6 +1970,7 @@ class DharmYudhGame {
       // AI v2: Pattern recognition, wake-up, rage awareness
       aiActionHistory:[],aiPatterns:{attackFreq:0,blockFreq:0,jumpFreq:0,dodgeFreq:0,specialFreq:0,lastPatternScan:0},
       aiWakeupMode:'',aiRageDefensive:false,aiAggressiveTimer:0,aiNextAction:'',aiWasHitstun:false,
+      _comboStep:0,_lastAttackHit:false,
     };
   }
   startRound(){
@@ -2273,18 +2274,47 @@ class DharmYudhGame {
       rt=.35;ag=.35;bc=.12;dc=.08;
       predictChance=.1;punishWindow=.15;comboChance=.1;specialChance=.12;jumpChance=.2;
     }else if(this.difficulty==='hard'){
-      rt=.08;ag=.85;bc=.4;dc=.25;
-      predictChance=.5;punishWindow=.45;comboChance=.55;specialChance=.45;jumpChance=.5;
+      rt=.07;ag=.88;bc=.42;dc=.28;
+      predictChance=.55;punishWindow=.5;comboChance=.6;specialChance=.5;jumpChance=.55;
     }else{
       rt=.2;ag=.6;bc=.25;dc=.15;
       predictChance=.25;punishWindow=.3;comboChance=.25;specialChance=.2;jumpChance=.35;
     }
 
+    // Character-specific optimal ranges and tactics
+    const charId = this.enemyChar && this.enemyChar.id;
+    // Rangers (archers) prefer distance, brawlers prefer close range
+    const isRanger = charId==='arjuna'||charId==='karna';
+    const isBrawler = charId==='bhima';
+    let optimalDist = 80; // default close range
+    if(isRanger){
+      optimalDist = 160; // Keep distance for archers
+      if(dist<100)bc=Math.min(bc*1.25,0.55); // Block more when cornered
+      if(dist>120&&entity.attackCooldown<=0)ag*=0.8; // Attack less when far = patient
+      jumpChance*=0.7; // Less jumping as archer
+    }else if(isBrawler){
+      optimalDist = 50; // Get in close for brawlers
+      if(dist>180)ag*=1.3; // Rush down aggressively
+      comboChance=Math.min(comboChance*1.2,0.75); // Better combo follow-up as brawler
+      // Use character speed to influence approach
+      if(entity.stats.speed<140)ag*=1.1; // Slow chars compensate with aggression
+    }else{
+      // All-rounders - adapt based on matchup
+      if(entity.stats.speed>170)optimalDist=120; // Fast chars = hit-and-run
+      else optimalDist=90;
+    }
+
     // Survival scaling: each wave makes AI harder
     if(this.gameMode==='survival'){
-      const waveScale=Math.min(1+(this.survivalWave-1)*.08,1.6);
+      const waveScale=Math.min(1+(this.survivalWave-1)*.1,1.8);
       ag*=waveScale;dc*=waveScale;punishWindow*=waveScale;
       specialChance*=waveScale;comboChance*=waveScale;predictChance*=waveScale;
+      bc=Math.min(bc*waveScale,0.6);
+      rt=Math.max(rt/waveScale,0.03); // Faster reactions each wave
+      // Every 3rd wave: extra aggression
+      if(this.survivalWave%3===0){ag*=1.15;comboChance=Math.min(comboChance*1.2,0.9);}
+      // Every 5th wave: boss-like AI
+      if(this.survivalWave%5===0){rt*=0.7;predictChance=Math.min(predictChance*1.25,0.8);}
     }
 
     // Dynamic aggression: losing = more aggressive, winning = defensive
@@ -2301,10 +2331,10 @@ class DharmYudhGame {
     entity.aiActionHistory.push(oppAction);
     if(entity.aiActionHistory.length>12)entity.aiActionHistory.shift();
 
-    // ─── PATTERN SCAN: every ~2s, analyze player tendencies ────
+    // ─── PATTERN SCAN: every ~1.2s, analyze player tendencies ────
     entity.aiPatterns.lastPatternScan-=dt;
     if(entity.aiPatterns.lastPatternScan<=0&&entity.aiActionHistory.length>=6){
-      entity.aiPatterns.lastPatternScan=1.5+Math.random()*.5;
+      entity.aiPatterns.lastPatternScan=1.0+Math.random()*0.4;
       const hist=entity.aiActionHistory;
       let aC=0,bC=0,jC=0,dC=0,sC=0,tot=hist.length;
       for(let i=0;i<tot;i++){
@@ -2320,6 +2350,48 @@ class DharmYudhGame {
       entity.aiPatterns.jumpFreq=jC/tot;
       entity.aiPatterns.dodgeFreq=dC/tot;
       entity.aiPatterns.specialFreq=sC/tot;
+      // Predict next action: check last 3 actions for patterns
+      if(hist.length>=3){
+        const last3=hist.slice(-3);
+        // Detect repeating sequences (e.g. light-light-special, jump-attack-block)
+        const uniqueActions=new Set(last3);
+        entity.aiPatterns.repeating=uniqueActions.size===1;
+        entity.aiPatterns.alternating=uniqueActions.size===2&&last3[0]===last3[2];
+        // Track specific action sequences for prediction
+        entity.aiPatterns.lastAction3=last3.join(',');
+      }
+    }
+
+    // ─── PREDICTIVE COUNTER: anticipate opponent's next move ──
+    // Based on recent history and distance, predict and pre-counter
+    if(entity.aiPatterns.lastPatternScan>0&&entity.aiActionHistory.length>=4&&entity.aiTimer<=0){
+      const p=entity.aiPatterns;
+      const predRoll=Math.random();
+      const lastAction=entity.aiActionHistory[entity.aiActionHistory.length-1];
+      const secondLast=entity.aiActionHistory[entity.aiActionHistory.length-2];
+      // If player did the same action twice in a row, expect it again (repeating pattern)
+      if(p.repeating&&dist<160&&predRoll<0.3*predictChance*2){
+        // Pre-counter the predicted repeat
+        if(lastAction==='light'||lastAction==='heavy'){
+          // Predict another attack → dodge preemptively
+          if(entity.grounded&&entity.dodgeCooldown<=0&&predRoll<0.4){
+            entity.dodgeTimer=.15;entity.dodgeCooldown=.6;entity.invTimer=.2;
+            entity.velocityX=entity.facing*-450;
+            this.audio.playSfx('dodge',rng(.9,1.1));
+            entity.stateTimer=.3;entity.aiLastAction='predict_dodge';entity.aiTimer=.3;
+          }
+        }else if(lastAction==='jump'&&entity.grounded){
+          // Predict another jump → anti-air
+          entity.aiLastAction='predict_anti_air';
+        }
+      }
+      // Alternating pattern: light-heavy-light → expect heavy and block
+      if(p.alternating&&dist<150&&predRoll<0.25*predictChance){
+        if(secondLast==='heavy'||lastAction==='heavy'){
+          entity.blocking=true;entity.blockTimer=.35+Math.random()*.2;
+          entity.stateTimer=.4;entity.aiLastAction='predict_block';entity.aiTimer=.2;
+        }
+      }
     }
 
     // ─── RAGE AWARENESS ────────────────────────────────────────
@@ -2335,10 +2407,11 @@ class DharmYudhGame {
     }
     // If AI itself is in rage, become hyper-aggressive
     if(entity.rageActive){
-      ag*=1.4;
-      comboChance=Math.min(comboChance*1.5,0.9);
-      specialChance=Math.min(specialChance*1.4,0.7);
-      bc*=0.5;
+      ag*=1.5;
+      comboChance=Math.min(comboChance*1.6,0.95);
+      specialChance=Math.min(specialChance*1.5,0.75);
+      bc*=0.4;
+      rt*=0.6; // Faster reaction time in rage
     }
 
     // ─── PATTERN-BASED ADAPTATION ──────────────────────────────
@@ -2346,22 +2419,34 @@ class DharmYudhGame {
     const p=entity.aiPatterns;
     if(p.lastPatternScan>0){ // Only if we've scanned at least once
       // Player jumps a lot → anti-air with light attacks when they approach
-      if(p.jumpFreq>0.25&&dist<180&&entity.grounded){
+      if(p.jumpFreq>0.2&&dist<200&&entity.grounded){
         entity.aiLastAction='anti_air';
+        ag*=1.3; // More aggressive anti-air
+        dc*=1.5; // Dodge jump-ins
       }
-      // Player blocks a lot → use more throws/grabs (heavies that guard crush)
-      if(p.blockFreq>0.4){
-        ag*=1.15; // More aggressive, force them to stop blocking
-        comboChance=Math.min(comboChance*1.2,0.8); // Longer block pressure
+      // Player blocks a lot → use more guard-breaking heavies
+      if(p.blockFreq>0.35){
+        ag*=1.2; // More aggressive, force them to stop blocking
+        comboChance=Math.min(comboChance*1.3,0.85); // Longer block pressure
+        specialChance=Math.min(specialChance*1.2,0.6); // Specials to break guard
       }
       // Player dodges a lot → delay attacks to catch dodge recovery
       if(p.dodgeFreq>0.2){
-        bc*=0.7; // Less blocking, more chasing
+        bc*=0.6; // Less blocking, more chasing
+        ag*=1.15; // Chase more aggressively
+        punishWindow*=1.3; // Better at punishing dodge recovery
       }
       // Player spams specials → stay close to pressure them
-      if(p.specialFreq>0.2){
-        ag*=1.2; // Close the distance
-        dc=Math.min(dc*1.5,0.5); // Dodge their specials
+      if(p.specialFreq>0.18){
+        ag*=1.25; // Close the distance
+        dc=Math.min(dc*1.6,0.55); // Dodge their specials
+        rt*=0.8; // React faster to specials
+      }
+      // Player attacks a lot → focus on defense and counter
+      if(p.attackFreq>0.5){
+        bc=Math.min(bc*1.5,0.6); // Block more
+        dc=Math.min(dc*1.4,0.5); // Dodge more
+        punishWindow*=1.4; // Punish their aggression
       }
     }
 
@@ -2380,16 +2465,32 @@ class DharmYudhGame {
       }
     }
 
-    // --- COMBO CHAINING: follow up after hitting ---
-    if(entity.aiComboChain>0&&entity.attackCooldown<=0&&dist<110&&entity.aiTimer<=0){
-      entity.aiComboChain--;
-      if(Math.random()<comboChance){
-        if(Math.random()<.4&&entity.energy>=CONFIG.SPECIAL_COST&&entity.specialCooldown<=0){
+    // --- COMBO CHAINING: hit-confirmed follow-up ---
+    // Track if last attack hit: opponent in hitstun or combo counter increased
+    const lastAttackHit = opp.hitstun > 0.05 || opp.hitFlash > 0.5;
+    entity._lastAttackHit = lastAttackHit;
+
+    if(entity.aiComboChain>0&&entity.attackCooldown<=0&&dist<120&&entity.aiTimer<=0){
+      if(lastAttackHit){
+        // Hit confirmed! Chain into extended combo
+        entity.aiComboChain--;
+        const comboStep = entity._comboStep || 0;
+        entity._comboStep = (comboStep + 1) % 3;
+        // Combo routing: light→light→heavy→special, heavy→special
+        if(entity.energy>=CONFIG.SPECIAL_COST&&entity.specialCooldown<=0&&
+           (comboChance>0.4||comboStep>=2)&&Math.random()<comboChance*0.8){
           this.performSpecial(entity,opp);entity.stateTimer=1.0;entity.aiLastAction='combo_special';
+        }else if(comboStep===2||Math.random()<0.4){
+          this.performAttack(entity,opp,'heavy');entity.stateTimer=.5;entity.aiLastAction='combo_heavy';
         }else{
-          this.performAttack(entity,opp,Math.random()<.35?'heavy':'light');
-          entity.stateTimer=.4;entity.aiLastAction='combo_light';
-        }entity.aiTimer=.15;return;
+          this.performAttack(entity,opp,'light');entity.stateTimer=.4;entity.aiLastAction='combo_light';
+        }
+        entity.aiTimer=.12;return;
+      }else{
+        // Attack whiffed — stop combo
+        entity.aiComboChain=0;
+        entity._comboStep=0;
+        entity.aiTimer=.3;
       }
     }
 
@@ -2399,7 +2500,9 @@ class DharmYudhGame {
 
     // --- OPTIMAL RANGE POSITIONING ---
     const wantClose=entity.attackCooldown<=0;
-    const optimalDist=wantClose?80:180;
+    // Character-specific optimal distance, adjusted by wantClose
+    if(wantClose)optimalDist=Math.max(40,optimalDist-30);
+    else optimalDist=Math.min(200,optimalDist+80);
 
     // --- ANTI-AIR: punish airborne opponents ---
     if(!opp.grounded&&dist<160&&entity.grounded&&entity.attackCooldown<=0&&roll<ag*.6){
