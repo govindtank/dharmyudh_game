@@ -1798,6 +1798,7 @@ class DharmYudhGame {
     this.titlePulse=0;
     this.koFreezeTimer=0;this.koFreezeText='';
     this.specialZoomPulse=0;
+    this._fightIntroFlashed=false;
     this.bindInput();this.resize();
     this.loadAssets();
   }
@@ -1937,6 +1938,7 @@ class DharmYudhGame {
     this.state='battle';this.battleActive=false;this.round=1;this.playerWins=0;this.enemyWins=0;this.comboCount=0;
     this.survivalWave=this.survivalWave||1;
     this.audio.startMusic();
+    this._fightIntroFlashed=false;
     this.showToast(`${this.playerChar.name} VS ${this.enemyChar.name}!`);
     this.roundIntroTimer=2.5;
     this.cinematicZoom=0;this.cinematicZoomTarget=.85;
@@ -2866,25 +2868,96 @@ class DharmYudhGame {
     }
     this.drawHUD(ctx);
     
-    // Round intro overlay
+    // Round intro overlay — dramatic phased presentation
     if(this.roundIntroTimer>0){
-      const a=Math.min(this.roundIntroTimer*2,1);
+      const t=this.roundIntroTimer;
+      const a=Math.min(t*2.5,1);
       ctx.save();ctx.globalAlpha=a;
-      ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(0,0,CONFIG.W,CONFIG.H);
+      ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,CONFIG.W,CONFIG.H);
       ctx.textAlign='center';
-      ctx.fillStyle='#ffd700';ctx.font='bold 52px Orbitron,sans-serif';
-      ctx.shadowColor='#ffd700';ctx.shadowBlur=40;
-      ctx.fillText('ROUND '+this.round,CONFIG.W/2,CONFIG.H/2-25);
-      ctx.shadowBlur=0;ctx.fillStyle='rgba(255,255,255,.6)';ctx.font='28px Rajdhani,sans-serif';
-      ctx.fillText('FIGHT!',CONFIG.W/2,CONFIG.H/2+40);
-      // VS portrait display
-      if(this.roundIntroTimer>1.5){
-        ctx.font='18px Rajdhani,sans-serif';ctx.fillStyle=this.playerChar.color;
-        ctx.fillText(this.playerChar.name,CONFIG.W/2-200,CONFIG.H/2+80);
-        ctx.fillStyle='rgba(255,255,255,.3)';ctx.fillText('VS',CONFIG.W/2,CONFIG.H/2+80);
-        ctx.fillStyle=this.enemyChar.color;
-        ctx.fillText(this.enemyChar.name,CONFIG.W/2+200,CONFIG.H/2+80);
+      
+      // Phase 1: Character silhouettes emerge (t>1.6)
+      if(t>1.6){
+        const silAlpha=Math.min((t-1.6)/.4,1);
+        const slideIn=1-Math.max(0,(t-1.6)/.9);
+        // Left silhouette (player)
+        ctx.save();ctx.globalAlpha=silAlpha*.3;
+        ctx.translate(CONFIG.W/2-260+slideIn*100,CONFIG.H/2-10);
+        ctx.scale(3.5,3.5);
+        this.playerChar.draw(ctx,0,0,30,50,1,Math.floor(this.gameTime*2)%6,{attacking:false,specialActive:false},false);
+        ctx.restore();
+        // Right silhouette (enemy)
+        ctx.save();ctx.globalAlpha=silAlpha*.3;
+        ctx.translate(CONFIG.W/2+260-slideIn*100,CONFIG.H/2-10);
+        ctx.scale(3.5,3.5);
+        this.enemyChar.draw(ctx,0,0,30,50,-1,Math.floor(this.gameTime*2)%6,{attacking:false,specialActive:false},false);
+        ctx.restore();
+        // Ground dust particles
+        if(Math.random()<.25){
+          this.particles.emit(CONFIG.W/2-220+rng(-15,15),CONFIG.GROUND_Y-3,{count:1,type:'smoke',speed:30,life:.5,size:10,color:'#998877',gravity:-8});
+          this.particles.emit(CONFIG.W/2+220+rng(-15,15),CONFIG.GROUND_Y-3,{count:1,type:'smoke',speed:30,life:.5,size:10,color:'#998877',gravity:-8});
+        }
       }
+      
+      // Phase 2: VS emblem + names (t>0.7)
+      if(t>0.7){
+        // Character names
+        ctx.font='bold 20px Rajdhani,sans-serif';
+        ctx.fillStyle=this.playerChar.color;ctx.globalAlpha=Math.min((t-0.7)/.3,1)*.75;
+        ctx.fillText(this.playerChar.name,CONFIG.W/2-215,CONFIG.H/2+105);
+        ctx.fillStyle=this.enemyChar.color;
+        ctx.fillText(this.enemyChar.name,CONFIG.W/2+215,CONFIG.H/2+105);
+        ctx.globalAlpha=a;
+        
+        // Character name background lines
+        ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(CONFIG.W/2-295,CONFIG.H/2+80);ctx.lineTo(CONFIG.W/2-135,CONFIG.H/2+80);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(CONFIG.W/2+135,CONFIG.H/2+80);ctx.lineTo(CONFIG.W/2+295,CONFIG.H/2+80);ctx.stroke();
+        
+        // ROUND X
+        ctx.font='bold 36px Orbitron,sans-serif';
+        ctx.fillStyle='rgba(255,215,0,.65)';
+        ctx.shadowColor='rgba(255,215,0,.2)';ctx.shadowBlur=20;
+        ctx.fillText('ROUND '+this.round,CONFIG.W/2,CONFIG.H/2-55);
+        ctx.shadowBlur=0;
+        
+        // VS emblem with pulse
+        const vsPulse=1+Math.sin(t*10)*.05;
+        ctx.save();ctx.translate(CONFIG.W/2,CONFIG.H/2+8);ctx.scale(vsPulse,vsPulse);
+        ctx.shadowColor='#ff6b35';ctx.shadowBlur=25+Math.sin(t*8)*10;
+        ctx.font='bold 68px Orbitron,sans-serif';
+        const vsg=ctx.createLinearGradient(-75,0,75,0);
+        vsg.addColorStop(0,this.playerChar.color);vsg.addColorStop(.5,'#ffd700');vsg.addColorStop(1,this.enemyChar.color);
+        ctx.fillStyle=vsg;ctx.fillText('VS',0,6);
+        ctx.shadowBlur=0;
+        ctx.restore();
+        
+        // VS sparkle particles
+        if(Math.random()<.15){
+          this.particles.emit(CONFIG.W/2+rng(-50,50),CONFIG.H/2+rng(-25,25),{count:1,type:'sparkle',speed:50,life:.25,size:3,spread:1,color:['#ffd700','#ffffff','#ff6b35'],gravity:0});
+        }
+      }
+      
+      // Phase 3: FIGHT! (t<0.7)
+      if(t<0.7&&t>0){
+        const fightAlpha=t<0.55?Math.min(t*6,1):1;
+        ctx.globalAlpha=fightAlpha*a;
+        const fightScale=1.2-Math.max(0,(0.6-t)/.5*.2);
+        ctx.save();ctx.translate(CONFIG.W/2,CONFIG.H/2+60);ctx.scale(fightScale,fightScale);
+        ctx.shadowColor='#ff4400';ctx.shadowBlur=40+Math.sin(t*25)*12;
+        ctx.fillStyle='#ffffff';ctx.font='bold 58px Orbitron,sans-serif';
+        ctx.fillText('FIGHT!',0,0);
+        ctx.shadowBlur=0;
+        ctx.restore();
+        // Screen flash on FIGHT! first frame
+        if(!this._fightIntroFlashed){
+          this._fightIntroFlashed=true;
+          this.flashEffect=.5;this.screenShake=10;
+          this.particles.emit(CONFIG.W/2,CONFIG.H/2,{count:16,type:'ring',speed:0,life:.35,size:25,color:'#ffd700'});
+          this.particles.emit(CONFIG.W/2,CONFIG.GROUND_Y,{count:10,type:'spark',speed:250,life:.3,size:4,spread:Math.PI*2,color:['#ffd700','#ffffff','#ff6b35'],gravity:0});
+        }
+      }
+      
       ctx.restore();
     }
     
@@ -2988,6 +3061,15 @@ class DharmYudhGame {
     if(!this.player||!this.enemy)return;
     ctx.save();
     const pBX=20,pBW=290,pBY=50;
+    // Character-themed HUD background panel
+    ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();
+    ctx.roundRect(pBX-8,pBY-18,pBW+50,88,4);ctx.fill();
+    ctx.strokeStyle=this.playerChar.color+'33';ctx.lineWidth=1;
+    ctx.beginPath();ctx.roundRect(pBX-8,pBY-18,pBW+50,88,4);ctx.stroke();
+    // Decorative top accent bar
+    ctx.fillStyle=this.playerChar.color+'44';
+    ctx.beginPath();ctx.roundRect(pBX-8,pBY-18,pBW+50,3,1.5);ctx.fill();
+    
     ctx.textAlign='left';
     ctx.fillStyle=this.playerChar.color;
     ctx.font='bold 22px Rajdhani,sans-serif';
@@ -3088,6 +3170,15 @@ class DharmYudhGame {
     
     // Enemy HUD - right
     const eBX=CONFIG.W-20-pBW;
+    // Character-themed enemy HUD background panel
+    ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();
+    ctx.roundRect(eBX-42,pBY-18,pBW+50,88,4);ctx.fill();
+    ctx.strokeStyle=this.enemyChar.color+'33';ctx.lineWidth=1;
+    ctx.beginPath();ctx.roundRect(eBX-42,pBY-18,pBW+50,88,4);ctx.stroke();
+    // Decorative top accent bar
+    ctx.fillStyle=this.enemyChar.color+'44';
+    ctx.beginPath();ctx.roundRect(eBX-42,pBY-18,pBW+50,3,1.5);ctx.fill();
+    
     ctx.textAlign='right';ctx.fillStyle=this.enemyChar.color;
     ctx.font='bold 22px Rajdhani,sans-serif';
     ctx.fillText(this.enemyChar.name,CONFIG.W-20,50);
@@ -3136,11 +3227,31 @@ class DharmYudhGame {
       ctx.restore();
     }
     
-    // Timer
-    ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.25)';ctx.font='bold 24px Rajdhani,sans-serif';
-    ctx.fillText(Math.ceil(this.battleTimer),CONFIG.W/2,46);
-    ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=2;
+    // Timer with tension effects
     const tp=this.battleTimer/this.maxBattleTime;
+    const timeLow=this.battleTimer<=10;
+    // Timer color: white→yellow→red as time decreases
+    let timerColor;
+    if(tp>.5)timerColor=`rgba(255,255,255,${.25+tp*.05})`;
+    else if(tp>.25)timerColor=`rgba(255,215,0,${.3+(.5-tp)*.4})`;
+    else timerColor=`rgba(255,50,50,${.3+(.25-tp)*1.2})`;
+    ctx.textAlign='center';ctx.font='bold 24px Rajdhani,sans-serif';
+    if(timeLow){
+      ctx.save();
+      ctx.shadowColor='#ff0000';ctx.shadowBlur=15+Math.sin(this.gameTime*20)*8;
+      ctx.fillStyle=`rgba(255,50,50,${.4+Math.sin(this.gameTime*12)*.2})`;
+      ctx.fillText(Math.ceil(this.battleTimer),CONFIG.W/2,46);
+      ctx.shadowBlur=0;
+      ctx.restore();
+    }else{
+      ctx.fillStyle=timerColor;ctx.fillText(Math.ceil(this.battleTimer),CONFIG.W/2,46);
+    }
+    // Arc timer color: green→yellow→red with pulse
+    let arcColor;
+    if(tp>.5)arcColor='rgba(100,220,100,.15)';
+    else if(tp>.25)arcColor='rgba(255,215,0,.2)';
+    else arcColor=`rgba(255,50,50,${.15+Math.sin(this.gameTime*16)*.05})`;
+    ctx.strokeStyle=arcColor;ctx.lineWidth=3;
     ctx.beginPath();ctx.arc(CONFIG.W/2,36,24,-Math.PI/2,-Math.PI/2+Math.PI*2*tp);ctx.stroke();
     
     ctx.fillStyle='rgba(255,255,255,.15)';ctx.font='12px Rajdhani,sans-serif';
