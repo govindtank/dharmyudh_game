@@ -16,7 +16,7 @@ export class StorageSystem {
         volumeMusic: 0.1,
         volumeSfx: 0.5,
         graphicsQuality: 'high', // 'low', 'medium', 'high', 'ultra'
-        screenShakeEnabled: true,
+        screenShakeEnabled: false,
         particleDensity: 1.0,
         controlsMode: 'classic', // 'classic', 'modern'
         keyBindings: {

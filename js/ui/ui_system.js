@@ -20,6 +20,8 @@ export class UISystem {
 
     // Menu selections
     this.selectedMenuItem = 0;
+    this.pauseMenuSelection = 0;
+    this.resultMenuSelection = 0;
     this.menuItems = ['Arcade Mode', 'Story Mode', 'Versus 2-Player', 'Survival Mode', 'Achievements', 'Settings'];
   }
 
@@ -83,6 +85,55 @@ export class UISystem {
       }
     }
 
+    // Pause state inputs
+    if (this.game.state === 'pause') {
+      if (this.game.input.keyJustPressed['ArrowUp'] || this.game.input.keyJustPressed['w']) {
+        this.pauseMenuSelection = 0;
+        this.game.audio.playSfx('select', 0.85);
+      }
+      if (this.game.input.keyJustPressed['ArrowDown'] || this.game.input.keyJustPressed['s']) {
+        this.pauseMenuSelection = 1;
+        this.game.audio.playSfx('select', 0.85);
+      }
+      if (this.game.input.keyJustPressed['Enter']) {
+        if (this.pauseMenuSelection === 0) {
+          this.game.state = 'battle';
+        } else {
+          this.game.state = 'menu';
+          this.game.audio.stopMusic();
+        }
+        this.game.audio.playSfx('select', 1.2);
+      }
+      if (this.game.input.keyJustPressed['Escape']) {
+        this.game.state = 'battle';
+        this.game.audio.playSfx('select', 0.85);
+      }
+    }
+
+    // Result state inputs
+    if (this.game.state === 'result') {
+      if (this.game.input.keyJustPressed['ArrowLeft'] || this.game.input.keyJustPressed['a']) {
+        this.resultMenuSelection = 0;
+        this.game.audio.playSfx('select', 0.85);
+      }
+      if (this.game.input.keyJustPressed['ArrowRight'] || this.game.input.keyJustPressed['d']) {
+        this.resultMenuSelection = 1;
+        this.game.audio.playSfx('select', 0.85);
+      }
+      if (this.game.input.keyJustPressed['Enter']) {
+        if (this.resultMenuSelection === 0) {
+          this.game.state = 'battle';
+          this.game.playerWins = 0;
+          this.game.enemyWins = 0;
+          this.game.round = 1;
+          this.game.startRound();
+        } else {
+          this.game.state = 'menu';
+        }
+        this.game.audio.playSfx('select', 1.2);
+      }
+    }
+
     // Character Select State inputs
     if (this.game.state === 'characterSelect') {
       // Nav handled directly in core for now
@@ -141,6 +192,10 @@ export class UISystem {
         break;
       case 'result':
         this.drawResults(ctx);
+        break;
+      case 'pause':
+        this.drawHUD(ctx); // Keep HUD visible in background
+        this.drawPauseMenu(ctx);
         break;
     }
   }
@@ -277,8 +332,18 @@ export class UISystem {
       ctx.font = 'italic 15px Rajdhani';
       ctx.fillText(`"${chData.taunt}"`, cx, 510);
 
+      // Display Passive Ability
+      if (chData.passive) {
+        ctx.fillStyle = '#4fc3f7';
+        ctx.font = 'bold 14px Rajdhani';
+        ctx.fillText(`${chData.passive.icon} ${chData.passive.name}`, cx, 530);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = '12px Rajdhani';
+        ctx.fillText(chData.passive.desc, cx, 548);
+      }
+
       // Render Stats bars
-      const st = 535;
+      const st = chData.passive ? 558 : 535;
       const sw = 250;
       const sh = 10;
       const sg = 18;
@@ -482,11 +547,61 @@ export class UISystem {
       ctx.fillText('BATTLE OVER', CONFIG.W / 2, CONFIG.H / 2 - 50);
     }
 
-    // Prompt to return
-    ctx.fillStyle = '#ff8f00';
-    ctx.font = 'bold 18px Rajdhani';
+    // Result Menu Options
+    const opts = ['PLAY AGAIN', 'MAIN MENU'];
+    const startX = CONFIG.W / 2 - 150;
+    const spacingX = 300;
+    
+    for (let i = 0; i < opts.length; i++) {
+      const isSelected = i === this.resultMenuSelection;
+      const x = startX + i * spacingX;
+      if (isSelected) {
+        ctx.fillStyle = '#ff8f00';
+        ctx.font = 'bold 24px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillText(`▶ ${opts[i]} ◀`, x, CONFIG.H - 80);
+      } else {
+        ctx.fillStyle = '#b8966a';
+        ctx.font = 'bold 20px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillText(opts[i], x, CONFIG.H - 80);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  drawPauseMenu(ctx) {
+    ctx.save();
+    
+    // Background Darkening Overlay
+    ctx.fillStyle = 'rgba(5, 5, 10, 0.85)';
+    ctx.fillRect(0, 0, CONFIG.W, CONFIG.H);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 64px Rajdhani';
     ctx.textAlign = 'center';
-    ctx.fillText('PRESS ENTER OR CLICK ANYWHERE TO RETURN TO MENU', CONFIG.W / 2, CONFIG.H - 80);
+    ctx.fillText('PAUSED', CONFIG.W / 2, CONFIG.H / 2 - 80);
+
+    const pauseOptions = ['Resume Battle', 'Quit to Menu'];
+    const startY = CONFIG.H / 2;
+    const spacingY = 50;
+
+    for (let i = 0; i < pauseOptions.length; i++) {
+      const item = pauseOptions[i];
+      const y = startY + i * spacingY;
+      const isSelected = i === this.pauseMenuSelection;
+
+      if (isSelected) {
+        ctx.fillStyle = '#ff8f00';
+        ctx.font = 'bold 26px Rajdhani';
+        ctx.fillText(`▶  ${item.toUpperCase()}  ◀`, CONFIG.W / 2, y);
+      } else {
+        ctx.fillStyle = '#b8966a';
+        ctx.font = 'bold 22px Rajdhani';
+        ctx.fillText(item.toUpperCase(), CONFIG.W / 2, y);
+      }
+    }
 
     ctx.restore();
   }
