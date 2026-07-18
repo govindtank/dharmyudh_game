@@ -1560,12 +1560,14 @@ class BackgroundSystem {
   constructor(game){
     this.game=game;
     this.stars=[];this.clouds=[];this.torches=[];this.banners=[];
-    this.fireflies=[];this.time=0;
+    this.fireflies=[];this.ambientDust=[];this.time=0;
     for(let i=0;i<120;i++) this.stars.push({x:Math.random()*CONFIG.W,y:Math.random()*(CONFIG.GROUND_Y-50),size:.5+Math.random()*2,speed:.02+Math.random()*.05,twinkle:Math.random()*Math.PI*2});
     for(let i=0;i<6;i++) this.clouds.push({x:Math.random()*CONFIG.W,y:30+Math.random()*120,w:80+Math.random()*180,speed:3+Math.random()*8,opacity:.08+Math.random()*.12});
     for(let i=0;i<6;i++) this.torches.push({x:40+i*250,y:CONFIG.GROUND_Y-5,flameOffset:Math.random()*Math.PI*2,intensity:.6+Math.random()*.4});
     for(let i=0;i<4;i++) this.banners.push({x:120+i*400,y:CONFIG.GROUND_Y-70,color:i%2===0?'#b71c1c':'#ffd700',waveOffset:i*1.7});
     for(let i=0;i<15;i++) this.fireflies.push({x:Math.random()*CONFIG.W,y:50+Math.random()*(CONFIG.GROUND_Y-100),speed:.3+Math.random()*.7,phase:Math.random()*Math.PI*2,size:1+Math.random()*2});
+    // Ambient drift particles (dust / embers) — persistent, recycled
+    for(let i=0;i<20;i++) this._spawnAmbientDust(i===0);
     // Pre-cache gradients
     this._gradients = {};
     this._buildGradients();
@@ -1590,6 +1592,20 @@ class BackgroundSystem {
     mg.addColorStop(0,'rgba(255,230,180,.15)');mg.addColorStop(.5,'rgba(255,220,150,.08)');mg.addColorStop(1,'transparent');
     this._gradients.moon=mg;
   }
+  _spawnAmbientDust(forceSpawn=false){
+    const isEmber=this.torches&&Math.random()<.25;
+    this.ambientDust.push({
+      x:forceSpawn?Math.random()*CONFIG.W:(Math.random()<.5?-20:CONFIG.W+20),
+      y:CONFIG.GROUND_Y-80-Math.random()*200,
+      size:isEmber?1.5+Math.random()*2:1+Math.random()*2.5,
+      speedX:isEmber?15+Math.random()*25:-20-Math.random()*30,
+      speedY:isEmber?-8-Math.random()*15:-2-Math.random()*6,
+      isEmber,
+      life:12+Math.random()*8,
+      maxLife:20,
+      phase:Math.random()*Math.PI*2,
+    });
+  }
   update(dt){
     this.time+=dt;
     for(const c of this.clouds){c.x+=c.speed*dt;if(c.x>CONFIG.W+c.w)c.x=-c.w;}
@@ -1597,6 +1613,14 @@ class BackgroundSystem {
       f.x+=Math.sin(this.time*f.speed+f.phase)*.3;f.y+=Math.cos(this.time*f.speed*2+f.phase)*.2;
       if(f.x<0)f.x=CONFIG.W;if(f.x>CONFIG.W)f.x=0;
       if(f.y<50)f.y=CONFIG.GROUND_Y-100;if(f.y>CONFIG.GROUND_Y-50)f.y=50;
+    }
+    // Ambient dust particles — drift across battlefield
+    for(let i=this.ambientDust.length-1;i>=0;i--){
+      const d=this.ambientDust[i];
+      d.x+=d.speedX*dt;d.y+=d.speedY*dt;
+      d.y+=Math.sin(this.time*.3+d.phase)*.15; // gentle float
+      d.life-=dt;
+      if(d.life<=0||d.x<-50||d.x>CONFIG.W+50){this.ambientDust.splice(i,1);this._spawnAmbientDust();}
     }
   }
   draw(ctx){
@@ -1694,6 +1718,20 @@ class BackgroundSystem {
       fg.addColorStop(1,'rgba(255,200,100,0)');
       ctx.fillStyle=fg;ctx.beginPath();ctx.arc(t.x,t.y,35*flick,0,Math.PI*2);ctx.fill();
       ctx.fillStyle='rgba(80,50,30,.3)';ctx.fillRect(t.x-2,t.y-28,4,28);
+    }
+    
+    // Ambient dust / embers
+    for(const d of this.ambientDust){
+      const da=Math.min(1,d.life/(d.maxLife*.3))*.35;
+      if(d.isEmber){
+        ctx.fillStyle=`rgba(255,160,60,${da})`;
+        ctx.shadowColor='rgba(255,160,60,.3)';ctx.shadowBlur=6;
+        ctx.beginPath();ctx.arc(d.x,d.y,d.size,0,Math.PI*2);ctx.fill();
+        ctx.shadowBlur=0;
+      }else{
+        ctx.fillStyle=`rgba(80,70,60,${da*.5})`;
+        ctx.beginPath();ctx.arc(d.x,d.y,d.size,0,Math.PI*2);ctx.fill();
+      }
     }
     
     // Fireflies
@@ -2081,8 +2119,19 @@ class DharmYudhGame {
       entity.velocityY+=CONFIG.GRAVITY*dt;
       entity.y+=entity.velocityY*dt;
       if(entity.y>=CONFIG.GROUND_Y){
+        const impactV=Math.abs(entity.velocityY);
         entity.y=CONFIG.GROUND_Y;entity.velocityY=0;
-        if(!entity.grounded){entity.grounded=true;this.particles.land(entity.x,entity.y);this.audio.playSfx('land');entity.airJuggleCount=0;}
+        if(!entity.grounded){
+          entity.grounded=true;entity.airJuggleCount=0;
+          this.particles.land(entity.x,entity.y);
+          this.audio.playSfx('land');
+          // Hard landing — proportional visual impact
+          if(impactV>400){
+            this.particles.emit(entity.x,entity.y,{count:Math.floor(impactV/60),type:'smoke',speed:60+impactV*.15,life:.25+impactV*.0004,size:8+impactV*.03,spread:.4,color:'#887766',gravity:0});
+            this.particles.emit(entity.x,entity.y,{count:Math.floor(impactV/120),type:'ring',speed:0,life:.2+impactV*.0003,size:12+impactV*.04,color:'rgba(200,180,160,'+Math.min(.4,impactV*.0006)+')'});
+            if(impactV>550&&this.screenShake<12)this.screenShake=Math.min(this.screenShake+impactV*.015,14);
+          }
+        }
       }
     }
     entity.x+=entity.velocityX*dt;
@@ -2481,7 +2530,14 @@ class DharmYudhGame {
           if(attacker.comboCount>=3)this.comboCount=Math.max(this.comboCount,attacker.comboCount);
           this.maxComboDisplay=Math.max(this.maxComboDisplay,attacker.comboCount);
           if(attacker.comboCount>1){damage*=1+(attacker.comboCount-1)*.07;}
-          if(attacker.comboCount%3===0){this.audio.playSfx('combo');this.audio.crowdCheer(.4);this.flashEffect=.3;}
+          if(attacker.comboCount%3===0){
+            this.audio.playSfx('combo');this.audio.crowdCheer(.4);
+            this.flashEffect=.3+Math.min(attacker.comboCount*.02,.3);
+            // Impact ripple at defender's position — scales with combo
+            const rippleSize=15+attacker.comboCount*3;
+            this.particles.emit(defender.x,defender.y-20,{count:Math.min(3+Math.floor(attacker.comboCount/3),10),type:'ring',speed:0,life:.3+attacker.comboCount*.015,size:rippleSize,color:attacker.comboCount>=6?'#ff00ff':'#ffd700'});
+            if(attacker.comboCount>=6&&this.screenShake<20)this.screenShake=Math.min(this.screenShake+attacker.comboCount*.5,20);
+          }
           
           // ── AIR COMBO (JUGGLE) ──
           if(!defender.grounded&&attacker.airJuggleCount<3){
@@ -2928,14 +2984,31 @@ class DharmYudhGame {
     }
     
     if(this.player.comboCount>1){
-      ctx.textAlign='left';ctx.fillStyle='#ffd700';ctx.font='bold 30px Rajdhani,sans-serif';
-      ctx.shadowColor='#ffd700';ctx.shadowBlur=18;
-      ctx.fillText(`${this.player.comboCount}x COMBO!`,pBX,enY+42);
+      ctx.textAlign='left';
+      const cc=this.player.comboCount;
+      // Color cycling for high combos
+      const comboHue=cc>=5?(this.gameTime*120+cc*30)%360:42;
+      const comboColor=cc>=5?`hsl(${comboHue},100%,60%)`:'#ffd700';
+      ctx.fillStyle=comboColor;ctx.font='bold 30px Rajdhani,sans-serif';
+      const cScale=1+Math.min(cc-1,7)*.02+Math.sin(this.gameTime*16)*.025;
+      ctx.save();ctx.translate(pBX,enY+42);ctx.scale(cScale,cScale);
+      ctx.shadowColor=comboColor;ctx.shadowBlur=18+Math.sin(this.gameTime*10)*6;
+      ctx.fillText(`${cc}x COMBO!`,0,0);
       ctx.shadowBlur=0;
+      ctx.restore();
     }
     if(this.comboCount>2){
-      ctx.textAlign='center';ctx.fillStyle='#ffd700';ctx.font='bold 22px Rajdhani,sans-serif';
-      ctx.fillText(`${this.comboCount} HIT!`,CONFIG.W/2,70);
+      const cc=this.comboCount;
+      ctx.textAlign='center';
+      const comboHue=cc>=5?(this.gameTime*100+cc*20)%360:42;
+      const comboColor=cc>=5?`hsl(${comboHue},100%,60%)`:'#ffd700';
+      ctx.fillStyle=comboColor;ctx.font='bold 22px Rajdhani,sans-serif';
+      const cScale=1+Math.min(cc-2,5)*.015+Math.sin(this.gameTime*12)*.02;
+      ctx.save();ctx.translate(CONFIG.W/2,70);ctx.scale(cScale,cScale);
+      ctx.shadowColor=comboColor;ctx.shadowBlur=12+Math.sin(this.gameTime*8)*4;
+      ctx.fillText(`${cc} HIT!`,0,0);
+      ctx.shadowBlur=0;
+      ctx.restore();
     }
     
     // Enemy HUD - right
