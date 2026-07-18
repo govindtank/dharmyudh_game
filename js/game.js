@@ -1961,6 +1961,8 @@ class DharmYudhGame {
       lastX:baseX,moveIntent:0,tauntTimer:0,damageDealt:0,
       hitstun:0,walking:false,
       rageActive:false,rageTimer:0,rageUsed:false,parryFrames:0,airJuggleCount:0,
+      // Combat v2: Guard break, counter hit
+      guardMeter:0,guardMax:100,guardBreakCooldown:0,guardBroken:false,
       // AI state
       aiState:'approach',aiTimer:0,aiLastAction:'',aiComboChain:0,aiOppLastAttacking:false,aiPunishWindow:0,
       // AI v2: Pattern recognition, wake-up, rage awareness
@@ -2091,16 +2093,41 @@ class DharmYudhGame {
     // RAGE MODE: activate at ≤25% HP (once per round, after hitstun clears)
     if(!entity.rageUsed&&entity.currentHp/entity.stats.hp<=0.25&&!entity.died&&entity.hitstun<=0){
       if(!entity.rageActive){
-        entity.rageActive=true;entity.rageUsed=true;entity.rageTimer=8;
+        entity.rageActive=true;entity.rageUsed=true;entity.rageTimer=9;
         this.particles.specialBurst(entity.x,entity.y-30,'#ff0000');
-        this.screenShake=10;this.audio.playSfx('special',1.3);
-        this.flashEffect=.5;
-        this._addDamageNum(entity.x,entity.y-60,'RAGE!','#ff0000',1.2,-120);
+        this.screenShake=15;this.audio.playSfx('special',1.3);
+        this.flashEffect=.8;this.slowMo=.2; // Dramatic slow-mo on rage activation
+        this.hitStopTimer=.15;
+        this._addDamageNum(entity.x,entity.y-60,'RAGE!','#ff0000',1.5,-120);
+        // Ground crack effect
+        this.particles.emit(entity.x,CONFIG.GROUND_Y,{count:16,type:'spark',speed:200,life:.4,size:6,spread:Math.PI*1.5,color:['#ff4400','#ffd700','#ff0000'],gravity:0});
       }
     }
     if(entity.rageActive){
       entity.rageTimer-=dt;
       if(entity.rageTimer<=0)entity.rageActive=false;
+    }
+    
+    // ── GUARD METER ──
+    // Fills while blocking, drains when not. Breaks at max → stun + vulnerability
+    if(entity.guardBroken){
+      entity.guardBreakCooldown-=dt;
+      if(entity.guardBreakCooldown<=0)entity.guardBroken=false;
+    }
+    if(entity.blocking&&!entity.guardBroken){
+      entity.guardMeter=Math.min(entity.guardMax,entity.guardMeter+28*dt);
+      if(entity.guardMeter>=entity.guardMax){
+        entity.guardMeter=0;entity.guardBroken=true;
+        entity.guardBreakCooldown=1.5;entity.blocking=false;
+        entity.hitstun=.6;
+        this.screenShake=15;
+        this.particles.heavyHitSparks(entity.x,entity.y-30);
+        this.particles.emit(entity.x,entity.y-20,{count:12,type:'ring',speed:0,life:.5,size:25,color:'#ff4400'});
+        this.audio.playSfx('counter');
+        this._addDamageNum(entity.x,entity.y-60,'GUARD BREAK!','#ff4400',1.0,-120);
+      }
+    }else if(!entity.blocking){
+      entity.guardMeter=Math.max(0,entity.guardMeter-35*dt);
     }
     
     // Smooth HP bar animation — displayHp follows currentHp quickly, damageHp lags behind
@@ -2172,7 +2199,7 @@ class DharmYudhGame {
       this.performAttack(entity,opp,'heavy');
     if((this.keyJustPressed['l']||this.keyJustPressed['L']||this.keyJustPressed['c']||this.keyJustPressed['C'])&&entity.specialCooldown<=0&&entity.energy>=CONFIG.SPECIAL_COST)
       this.performSpecial(entity,opp);
-    entity.blocking=!!(this.keys['Shift']&&!entity.attacking&&entity.grounded);
+    entity.blocking=!!(this.keys['Shift']&&!entity.attacking&&entity.grounded&&!entity.guardBroken);
     entity.speed=entity.blocking?entity.stats.speed*.5:entity.stats.speed;
   }
   
@@ -2207,7 +2234,7 @@ class DharmYudhGame {
       const wm=entity.aiWakeupMode;
       entity.aiWakeupMode='';
       if(wm==='block_wake'){
-        entity.blocking=true;entity.blockTimer=.25+Math.random()*.15;
+        entity.blocking=!entity.guardBroken;entity.blockTimer=.25+Math.random()*.15;
         entity.aiLastAction='wake_block';
       }else if(wm==='dodge_wake'){
         if(entity.dodgeCooldown<=0&&entity.grounded){
@@ -2215,11 +2242,11 @@ class DharmYudhGame {
           entity.velocityX=entity.facing*-450;
           this.audio.playSfx('dodge',rng(.9,1.1));
           entity.aiLastAction='wake_dodge';
-        }else entity.blocking=true;
+        }else entity.blocking=!entity.guardBroken;
       }else if(wm==='special_wake'){
         if(entity.energy>=CONFIG.SPECIAL_COST&&entity.specialCooldown<=0){
           this.performSpecial(entity,opp);entity.stateTimer=1.0;entity.aiLastAction='wake_special';
-        }else entity.blocking=true;
+        }else entity.blocking=!entity.guardBroken;
       }else if(wm==='jump_wake'){
         if(entity.grounded){entity.velocityY=-580;entity.grounded=false;
         entity.aiLastAction='wake_jump';}
@@ -2389,7 +2416,7 @@ class DharmYudhGame {
     }
 
     // Block when opponent attacks at mid range
-    if(opp.attacking&&dist<150&&roll<bc*.7&&entity.grounded){
+    if(opp.attacking&&dist<150&&roll<bc*.7&&entity.grounded&&!entity.guardBroken){
       // AI parry chance on harder difficulties
       const parryChance=this.difficulty==='hard'?.2:(this.difficulty==='normal'?.05:0);
       if(dist<100&&roll<parryChance){
@@ -2432,7 +2459,7 @@ class DharmYudhGame {
     }
 
     // --- BLOCK (defensive) ---
-    if(dist<110&&roll<bc&&entity.grounded&&!entity.blocking){
+    if(dist<110&&roll<bc&&entity.grounded&&!entity.blocking&&!entity.guardBroken){
       entity.blocking=true;entity.blockTimer=.15+Math.random()*.3;
       entity.stateTimer=.35;entity.aiLastAction='block';entity.aiTimer=.2;return;
     }
@@ -2510,22 +2537,47 @@ class DharmYudhGame {
           attacker.attacking=false;return;
         }
         
+        // ── COUNTER HIT ──
+        // Hitting an opponent during their attack startup = bonus damage + extra stun
+        const isCounterHit=defender.attacking&&defender.attackFrame<=2&&!defender.blocking;
+        if(isCounterHit){
+          damage*=1.35;
+          this.particles.emit(defender.x,defender.y-20,{count:5,type:'spark',speed:300,life:.25,size:6,spread:Math.PI*1.5,color:['#ffffff','#ffd700'],gravity:0});
+          this._addDamageNum(defender.x,defender.y-60,'COUNTER!','#ffffff',.9,-140);
+          this.audio.playSfx('counter');
+          this.screenShake=12;
+          this.hitStopTimer=.1;
+          // Set up juggle state for follow-up
+          attacker.airJuggleCount=0;
+        }
+        
         // ── RAGE DAMAGE BONUS ──
         if(attacker.rageActive)damage*=1.3;
         if(defender.rageActive)damage*=.85; // 15% damage reduction
         
+        // ── GUARD BREAK PUNISH ──
+        if(defender.guardBroken)damage*=1.5; // 50% extra damage when guard is broken
+        
         // ── BLOCK (normal) ──
-        if(defender.blocking){
+        if(defender.blocking&&!defender.guardBroken){
           damage*=.2;this.particles.hitSparks((attacker.x+defender.x)/2,defender.y-20,'#ffd700');
           this.audio.playSfx('block');defender.blocking=false;defender.hitstun=.1;
         }else{
           this.hitStopTimer=isHeavy?.12:.06;
           if(isHeavy){this.particles.heavyHitSparks(defender.x,defender.y-20);this.screenShake=14;this.audio.playSfx('heavy');this.audio.crowdGasp(.6);}
           else{this.particles.hitSparks(defender.x,defender.y-20,'#ff6b35');this.screenShake=6;this.audio.playSfx('hit');}
-          defender.hitFlash=1;defender.hitstun=isHeavy?.4:.18;
+          defender.hitFlash=1;
           const kd=defender.x>attacker.x?1:-1;
-          defender.velocityX=kd*(isHeavy?70:35);
-          if(isHeavy){defender.velocityY=-220;defender.grounded=false;}
+          // Counter hit gives extra hitstun + launches for air follow-up
+          if(isCounterHit){
+            defender.hitstun=isHeavy?.5:.3;
+            defender.velocityX=kd*120;
+            defender.velocityY=-280;defender.grounded=false;
+          }else{
+            defender.hitstun=isHeavy?.4:.18;
+            defender.velocityX=kd*(isHeavy?70:35);
+            if(isHeavy){defender.velocityY=-220;defender.grounded=false;}
+          }
           attacker.comboCount++;attacker.comboTimer=CONFIG.COMBO_WINDOW;
           if(attacker.comboCount>=3)this.comboCount=Math.max(this.comboCount,attacker.comboCount);
           this.maxComboDisplay=Math.max(this.maxComboDisplay,attacker.comboCount);
@@ -2726,6 +2778,8 @@ class DharmYudhGame {
         ['⭑ PARRY: Tap block at moment of impact to deflect & stun!'],
         ['⭑ AIR COMBOS: Launch enemy (K) then hit them in the air (J)!'],
         ['⭑ RAGE MODE: Below 25% HP — +30% ATK, -15% DMG taken!'],
+        ['⭑ COUNTER HIT: Strike during enemy attack startup for bonus damage!'],
+        ['⭑ GUARD BREAK: Dont over-block! Guard breaks → stunned + 50% dmg!'],
         [''],
         ['COMBOS: hit quickly for bonus damage!'],
         ['SURVIVAL: defeat waves of enemies!'],
@@ -2983,6 +3037,27 @@ class DharmYudhGame {
       ctx.restore();
     }
     
+    // Guard meter — fills with yellow→red as guard approaches break
+    const gdY=enY+enB+3,gdH=4;
+    const grd=this.player.guardMeter/this.player.guardMax;
+    if(grd>0||this.player.guardBroken){
+      ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(pBX,gdY,pBW,gdH);
+      if(this.player.guardBroken){
+        // Flashing red during guard break recovery
+        if(Math.sin(this.gameTime*16)>0){
+          ctx.fillStyle='#ff1744';ctx.fillRect(pBX,gdY,pBW,gdH);
+        }
+        ctx.fillStyle='rgba(255,23,68,.5)';ctx.font='7px Rajdhani,sans-serif';
+        ctx.fillText('GUARD BROKEN!',pBX+3,gdY+gdH+8);
+      }else{
+        const gh=Math.round(grd*120);
+        ctx.fillStyle=`hsl(${40-gh},100%,${55-grd*20}%)`;
+        ctx.fillRect(pBX,gdY,pBW*grd,gdH);
+        ctx.fillStyle='rgba(255,255,255,.12)';ctx.font='7px Rajdhani,sans-serif';
+        ctx.fillText('GUARD',pBX+3,gdY+gdH+8);
+      }
+    }
+    
     if(this.player.comboCount>1){
       ctx.textAlign='left';
       const cc=this.player.comboCount;
@@ -3040,6 +3115,26 @@ class DharmYudhGame {
     esg.addColorStop(0,'rgba(255,255,255,.15)');esg.addColorStop(.5,'rgba(255,255,255,.05)');esg.addColorStop(1,'rgba(0,0,0,.1)');
     ctx.fillStyle=esg;ctx.fillRect(eBX,eHpY,pBW,hpB);
     ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;ctx.strokeRect(eBX,eHpY,pBW,hpB);
+    
+    // Enemy guard meter — shows opponent's guard status
+    const eGrd=this.enemy.guardMeter/this.enemy.guardMax;
+    if(eGrd>0||this.enemy.guardBroken){
+      const eGdY=eHpY+hpB+2,eGdH=4;
+      ctx.save();ctx.globalAlpha=.8;
+      ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(eBX,eGdY,pBW,eGdH);
+      if(this.enemy.guardBroken){
+        if(Math.sin(this.gameTime*16)>0){ctx.fillStyle='#ff1744';ctx.fillRect(eBX,eGdY,pBW,eGdH);}
+        ctx.fillStyle='rgba(255,23,68,.4)';ctx.font='7px Rajdhani,sans-serif';
+        ctx.textAlign='right';ctx.fillText('GUARD BROKEN',CONFIG.W-22,eGdY+eGdH+7);
+      }else{
+        const egh=Math.round(eGrd*120);
+        ctx.fillStyle=`hsl(${40-egh},100%,${55-eGrd*20}%)`;
+        ctx.textAlign='right';ctx.fillRect(eBX,eGdY,pBW*eGrd,eGdH);
+        ctx.fillStyle='rgba(255,255,255,.1)';ctx.font='7px Rajdhani,sans-serif';
+        ctx.fillText('GUARD',CONFIG.W-22,eGdY+eGdH+7);
+      }
+      ctx.restore();
+    }
     
     // Timer
     ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.25)';ctx.font='bold 24px Rajdhani,sans-serif';
