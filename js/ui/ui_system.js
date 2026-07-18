@@ -5,6 +5,8 @@
 import { CONFIG, clamp } from '../engine/config.js';
 import { SettingsPanel } from './settings.js';
 import { ACHIEVEMENTS } from '../progression/achievements.js';
+import { CHARACTERS } from '../characters/roster.js';
+import { BaseCharacter } from '../characters/base_character.js';
 
 export class UISystem {
   constructor(game) {
@@ -18,6 +20,8 @@ export class UISystem {
 
     // Menu selections
     this.selectedMenuItem = 0;
+    this.pauseMenuSelection = 0;
+    this.resultMenuSelection = 0;
     this.menuItems = ['Arcade Mode', 'Story Mode', 'Versus 2-Player', 'Survival Mode', 'Achievements', 'Settings'];
   }
 
@@ -39,15 +43,15 @@ export class UISystem {
 
     // Main Menu State inputs
     if (this.game.state === 'menu') {
-      if (this.game.input.keyJustPressed['ArrowUp']) {
+      if (this.game.input.keyJustPressed['ArrowUp'] || this.game.input.keyJustPressed['w'] || this.game.input.keyJustPressed['W']) {
         this.selectedMenuItem = (this.selectedMenuItem - 1 + this.menuItems.length) % this.menuItems.length;
         this.game.audio.playSfx('select', 0.85);
       }
-      if (this.game.input.keyJustPressed['ArrowDown']) {
+      if (this.game.input.keyJustPressed['ArrowDown'] || this.game.input.keyJustPressed['s'] || this.game.input.keyJustPressed['S']) {
         this.selectedMenuItem = (this.selectedMenuItem + 1) % this.menuItems.length;
         this.game.audio.playSfx('select', 0.85);
       }
-      if (this.game.input.keyJustPressed['Enter']) {
+      if (this.game.input.keyJustPressed['Enter'] || this.game.input.keyJustPressed[' ']) {
         this.confirmMenuSelection();
       }
 
@@ -78,6 +82,55 @@ export class UISystem {
       if (this.game.input.keyJustPressed['Escape'] || this.game.input.keyJustPressed['Enter'] || this.game.input.mouseClicked) {
         this.game.state = 'menu';
         this.game.audio.playSfx('select');
+      }
+    }
+
+    // Pause state inputs
+    if (this.game.state === 'pause') {
+      if (this.game.input.keyJustPressed['ArrowUp'] || this.game.input.keyJustPressed['w']) {
+        this.pauseMenuSelection = 0;
+        this.game.audio.playSfx('select', 0.85);
+      }
+      if (this.game.input.keyJustPressed['ArrowDown'] || this.game.input.keyJustPressed['s']) {
+        this.pauseMenuSelection = 1;
+        this.game.audio.playSfx('select', 0.85);
+      }
+      if (this.game.input.keyJustPressed['Enter']) {
+        if (this.pauseMenuSelection === 0) {
+          this.game.state = 'battle';
+        } else {
+          this.game.state = 'menu';
+          this.game.audio.stopMusic();
+        }
+        this.game.audio.playSfx('select', 1.2);
+      }
+      if (this.game.input.keyJustPressed['Escape']) {
+        this.game.state = 'battle';
+        this.game.audio.playSfx('select', 0.85);
+      }
+    }
+
+    // Result state inputs
+    if (this.game.state === 'result') {
+      if (this.game.input.keyJustPressed['ArrowLeft'] || this.game.input.keyJustPressed['a']) {
+        this.resultMenuSelection = 0;
+        this.game.audio.playSfx('select', 0.85);
+      }
+      if (this.game.input.keyJustPressed['ArrowRight'] || this.game.input.keyJustPressed['d']) {
+        this.resultMenuSelection = 1;
+        this.game.audio.playSfx('select', 0.85);
+      }
+      if (this.game.input.keyJustPressed['Enter']) {
+        if (this.resultMenuSelection === 0) {
+          this.game.state = 'battle';
+          this.game.playerWins = 0;
+          this.game.enemyWins = 0;
+          this.game.round = 1;
+          this.game.startRound();
+        } else {
+          this.game.state = 'menu';
+        }
+        this.game.audio.playSfx('select', 1.2);
       }
     }
 
@@ -140,6 +193,10 @@ export class UISystem {
       case 'result':
         this.drawResults(ctx);
         break;
+      case 'pause':
+        this.drawHUD(ctx); // Keep HUD visible in background
+        this.drawPauseMenu(ctx);
+        break;
     }
   }
 
@@ -196,13 +253,145 @@ export class UISystem {
     ctx.save();
     
     // Background Dark tint
-    ctx.fillStyle = '#0a0a0f';
+    ctx.fillStyle = '#050508';
     ctx.fillRect(0, 0, CONFIG.W, CONFIG.H);
 
-    ctx.fillStyle = '#dfa650';
-    ctx.font = 'bold 32px Rajdhani';
+    // Decorative border
+    ctx.strokeStyle = '#dfa650';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, 20, CONFIG.W - 40, CONFIG.H - 40);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 36px Rajdhani';
     ctx.textAlign = 'center';
-    ctx.fillText('SELECT YOUR WARRIOR', CONFIG.W / 2, 70);
+    ctx.fillText('SELECT YOUR WARRIOR', CONFIG.W / 2, 65);
+
+    const chData = CHARACTERS[this.game.selectedChar];
+    if (chData) {
+      // Lazily create character preview entity
+      if (!this.selectedCharEntity || this.selectedCharEntity.id !== chData.id) {
+        this.selectedCharEntity = new BaseCharacter(chData, true);
+      }
+
+      const cx = CONFIG.W / 2;
+      const cy = 300;
+
+      // Draw character background radial glow
+      const grad = ctx.createRadialGradient(cx, cy - 30, 10, cx, cy - 30, 200);
+      grad.addColorStop(0, `${chData.color}35`);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.fillRect(cx - 250, cy - 230, 500, 400);
+
+      // Render character using unified joint CharacterRenderer scaled up
+      ctx.save();
+      ctx.translate(cx, cy + 40);
+      ctx.scale(2.4, 2.4);
+      
+      this.selectedCharEntity.x = 0;
+      this.selectedCharEntity.y = 0;
+      this.selectedCharEntity.facing = 1;
+      this.selectedCharEntity.state = 'idle';
+      this.selectedCharEntity.animTime = (this.selectedCharEntity.animTime || 0) + 1/60;
+      
+      this.game.charRenderer.draw(ctx, this.selectedCharEntity);
+      ctx.restore();
+
+      // Check if character is locked
+      const isLocked = this.game.storage.data.progression.unlocks.lockedCharacters.includes(chData.id);
+      if (isLocked) {
+        // Draw Lock visual overlay
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(cx - 150, cy - 100, 300, 200);
+
+        ctx.fillStyle = '#ff3b30';
+        ctx.font = 'bold 80px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillText('🔒', cx, cy + 10);
+        ctx.font = 'bold 16px Rajdhani';
+        ctx.fillText('LOCKED WARRIOR', cx, cy + 50);
+        ctx.fillStyle = '#e8d5b0';
+        ctx.fillText('Beat Arcade Mode to unlock!', cx, cy + 75);
+      }
+
+      // Render Character Details
+      ctx.fillStyle = chData.color;
+      ctx.font = 'bold 36px Rajdhani';
+      ctx.textAlign = 'center';
+      ctx.fillText(chData.name.toUpperCase(), cx, 430);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.font = '22px Noto Sans Devanagari, Rajdhani';
+      ctx.fillText(chData.devanagari || '', cx, 460);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.font = 'italic 16px Rajdhani';
+      ctx.fillText(chData.title.toUpperCase(), cx, 485);
+
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+      ctx.font = 'italic 15px Rajdhani';
+      ctx.fillText(`"${chData.taunt}"`, cx, 510);
+
+      // Display Passive Ability
+      if (chData.passive) {
+        ctx.fillStyle = '#4fc3f7';
+        ctx.font = 'bold 14px Rajdhani';
+        ctx.fillText(`${chData.passive.icon} ${chData.passive.name}`, cx, 530);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = '12px Rajdhani';
+        ctx.fillText(chData.passive.desc, cx, 548);
+      }
+
+      // Render Stats bars
+      const st = chData.passive ? 558 : 535;
+      const sw = 250;
+      const sh = 10;
+      const sg = 18;
+
+      const stats = [
+        { label: 'HP', val: chData.stats.hp, max: 200, color: '#ef5350' },
+        { label: 'ATK', val: chData.stats.attack, max: 25, color: '#ff7043' },
+        { label: 'DEF', val: chData.stats.defense, max: 18, color: '#42a5f5' },
+        { label: 'SPD', val: chData.stats.speed, max: 240, color: '#66bb6a' },
+        { label: 'SPC', val: chData.stats.specialDmg, max: 55, color: '#ab47bc' }
+      ];
+
+      stats.forEach((s, idx) => {
+        const yy = st + idx * sg;
+        const fillWidth = (s.val / s.max) * sw;
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = 'bold 12px Rajdhani';
+        ctx.fillText(s.label, cx - sw / 2 - 35, yy + 8);
+
+        // Back bar
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.fillRect(cx - sw / 2, yy, sw, sh);
+
+        // Filled bar
+        ctx.fillStyle = s.color;
+        ctx.fillRect(cx - sw / 2, yy, fillWidth, sh);
+      });
+    }
+
+    // Navigation indicators
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff8f00';
+    ctx.font = 'bold 15px Rajdhani';
+    ctx.fillText('◄  CLICK LEFT/RIGHT SIDE TO NAVIGATE  ►', CONFIG.W / 2, CONFIG.H - 65);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px Rajdhani';
+    ctx.fillText('PRESS ENTER OR CLICK MIDDLE TO CONFIRM  |  ESC TO RETURN', CONFIG.W / 2, CONFIG.H - 45);
+
+    // Control bindings preview
+    const binds = this.game.storage.getSettings().keyBindings;
+    const p1Controls = `P1: Move [${binds.MoveLeft.toUpperCase()},${binds.Jump.toUpperCase()},${binds.Dodge.toUpperCase()},${binds.MoveRight.toUpperCase()}] Atk [${binds.AttackLight.toUpperCase()},${binds.AttackHeavy.toUpperCase()}] Spc [${binds.Special.toUpperCase()}] Blk [${binds.Block.toUpperCase()}]`;
+    const p2Controls = this.game.gameMode === 'versus2p' ? `  ||  P2: Move [ARROWS] Atk [${binds.P2AttackLight},${binds.P2AttackHeavy}] Spc [${binds.P2Special}] Blk [${binds.P2Block}]` : '';
+    
+    ctx.fillStyle = '#4caf50';
+    ctx.font = 'bold 14px Rajdhani';
+    ctx.fillText(`CONTROLS: ${p1Controls}${p2Controls}`, CONFIG.W / 2, CONFIG.H - 20);
 
     ctx.restore();
   }
@@ -358,11 +547,61 @@ export class UISystem {
       ctx.fillText('BATTLE OVER', CONFIG.W / 2, CONFIG.H / 2 - 50);
     }
 
-    // Prompt to return
-    ctx.fillStyle = '#ff8f00';
-    ctx.font = 'bold 18px Rajdhani';
+    // Result Menu Options
+    const opts = ['PLAY AGAIN', 'MAIN MENU'];
+    const startX = CONFIG.W / 2 - 150;
+    const spacingX = 300;
+    
+    for (let i = 0; i < opts.length; i++) {
+      const isSelected = i === this.resultMenuSelection;
+      const x = startX + i * spacingX;
+      if (isSelected) {
+        ctx.fillStyle = '#ff8f00';
+        ctx.font = 'bold 24px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillText(`▶ ${opts[i]} ◀`, x, CONFIG.H - 80);
+      } else {
+        ctx.fillStyle = '#b8966a';
+        ctx.font = 'bold 20px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillText(opts[i], x, CONFIG.H - 80);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  drawPauseMenu(ctx) {
+    ctx.save();
+    
+    // Background Darkening Overlay
+    ctx.fillStyle = 'rgba(5, 5, 10, 0.85)';
+    ctx.fillRect(0, 0, CONFIG.W, CONFIG.H);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 64px Rajdhani';
     ctx.textAlign = 'center';
-    ctx.fillText('PRESS ENTER OR CLICK ANYWHERE TO RETURN TO MENU', CONFIG.W / 2, CONFIG.H - 80);
+    ctx.fillText('PAUSED', CONFIG.W / 2, CONFIG.H / 2 - 80);
+
+    const pauseOptions = ['Resume Battle', 'Quit to Menu'];
+    const startY = CONFIG.H / 2;
+    const spacingY = 50;
+
+    for (let i = 0; i < pauseOptions.length; i++) {
+      const item = pauseOptions[i];
+      const y = startY + i * spacingY;
+      const isSelected = i === this.pauseMenuSelection;
+
+      if (isSelected) {
+        ctx.fillStyle = '#ff8f00';
+        ctx.font = 'bold 26px Rajdhani';
+        ctx.fillText(`▶  ${item.toUpperCase()}  ◀`, CONFIG.W / 2, y);
+      } else {
+        ctx.fillStyle = '#b8966a';
+        ctx.font = 'bold 22px Rajdhani';
+        ctx.fillText(item.toUpperCase(), CONFIG.W / 2, y);
+      }
+    }
 
     ctx.restore();
   }

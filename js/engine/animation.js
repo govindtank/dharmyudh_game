@@ -94,33 +94,56 @@ export class AnimationEngine {
       case 'attack': {
         const attackFrame = entity.attackFrame || 0;
         const attackType = entity.attackType || 'light';
-        const progress = attackFrame / (attackType === 'heavy' ? 8 : 5);
+        const dur = attackType === 'heavy' ? 8 : 5;
         
-        // Easing calculations for swings
-        const eased = this.easings.easeOut(progress);
-        pose.limbs.weaponAngle = eased * Math.PI * 0.8;
-        
-        if (attackType === 'heavy') {
-          pose.scaleX = 1.15;
-          pose.scaleY = 0.85; // Heavy squash
-          pose.limbs.rightArm = eased * Math.PI * 0.6;
+        // Anticipation logic: first 2 frames are wind up
+        let progress = 0;
+        let windUp = 0;
+        if (attackFrame <= 2) {
+            windUp = attackFrame / 2;
         } else {
-          pose.scaleX = 1.05;
-          pose.scaleY = 0.95;
-          pose.limbs.rightArm = eased * Math.PI * 0.45;
+            progress = (attackFrame - 2) / (dur - 2);
+        }
+        
+        const eased = this.easings.easeOut(progress);
+        const anticipation = this.easings.easeOut(windUp);
+        
+        if (progress === 0) {
+            // Wind up phase
+            pose.rotation = anticipation * -0.15 * (entity.facing || 1); // lean back
+            pose.limbs.weaponAngle = anticipation * -Math.PI * 0.15; // pull weapon back
+            pose.limbs.rightArm = anticipation * -0.3;
+            pose.bodyY = anticipation * 5; // squat slightly
+        } else {
+            // Strike phase
+            pose.limbs.weaponAngle = eased * Math.PI * 0.8;
+            pose.rotation = eased * 0.25 * (entity.facing || 1); // lean into strike
+            
+            if (attackType === 'heavy') {
+              pose.scaleX = 1.15;
+              pose.scaleY = 0.85; // Heavy squash
+              pose.limbs.rightArm = eased * Math.PI * 0.6;
+            } else {
+              pose.scaleX = 1.05;
+              pose.scaleY = 0.95;
+              pose.limbs.rightArm = eased * Math.PI * 0.45;
+            }
         }
         break;
       }
 
       case 'hitstun': {
-        // High frequency shake
-        const f = time * 0.3;
-        pose.bodyY = 0;
-        pose.rotation = Math.sin(f) * 0.15;
-        pose.scaleX = 0.95;
-        pose.scaleY = 1.05;
-        pose.limbs.leftArm = -0.4;
-        pose.limbs.rightArm = -0.4;
+        // Impact jerk instead of shake
+        const progress = Math.min(1, (entity.stateTimer || 0) / 0.35);
+        const impact = 1 - this.easings.easeOut(progress);
+        
+        pose.bodyY = impact * 15; // pushed down slightly
+        pose.rotation = impact * -0.35 * (entity.facing || 1); // Bend backwards
+        pose.scaleX = 1 + (impact * 0.1); 
+        pose.scaleY = 1 - (impact * 0.1); // squash
+        pose.limbs.leftArm = impact * -0.7;
+        pose.limbs.rightArm = impact * -0.5;
+        pose.limbs.headAngle = impact * -0.4 * (entity.facing || 1); // Head thrown back
         break;
       }
 

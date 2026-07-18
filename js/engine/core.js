@@ -86,6 +86,9 @@ export class DharmYudhGame {
     this.flashEffect = 0;
     this.koFreezeTimer = 0;
 
+    // Easter egg state
+    this.konamiActivated = false;
+
     // Menu settings
     this.selectedChar = 0;
 
@@ -154,14 +157,32 @@ export class DharmYudhGame {
 
       this.input.update();
 
-      // Keyboard hotkeys for difficulty toggle
-      if (this.input.keyJustPressed['1']) { this.difficulty = 'easy'; this.showToast('Difficulty: Easy'); }
-      if (this.input.keyJustPressed['2']) { this.difficulty = 'normal'; this.showToast('Difficulty: Normal'); }
-      if (this.input.keyJustPressed['3']) { this.difficulty = 'hard'; this.showToast('Difficulty: Hard'); }
+      // Show touch controls only during battle on mobile
+      this.input.setTouchControlsVisible(this.state === 'battle');
 
-      // Settings screen shortcut
-      if (this.input.keyJustPressed['Escape'] && this.state === 'menu') {
-        this.ui.settingsPanel.toggle();
+      // Keyboard hotkeys for difficulty toggle
+      if (this.input.k***['1']) { this.difficulty = 'easy'; this.showToast('Difficulty: Easy'); }
+      if (this.input.k***['2']) { this.difficulty = 'normal'; this.showToast('Difficulty: Normal'); }
+      if (this.input.k***['3']) { this.difficulty = 'hard'; this.showToast('Difficulty: Hard'); }
+
+      // ─── KONAMI CODE EASTER EGG ──────────────────────
+      if (!this.konamiActivated && this.input.checkCombo(
+        ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'], 2000
+      )) {
+        this.konamiActivated = true;
+        this.showToast('🔥 KURUKSHETRA AWAKENED! All characters unlocked! 🔥');
+        this.audio.playSfx('win', 1, 2);
+        this.storage.data.progression.unlocks.lockedCharacters = [];
+      }
+
+      // Settings or Pause shortcut
+      if (this.input.k***['Escape']) {
+        if (this.state === 'menu') {
+          this.ui.settingsPanel.toggle();
+        } else if (this.state === 'battle') {
+          this.state = 'pause';
+          this.audio.playSfx('select');
+        }
       }
 
       // State specific controls routing
@@ -181,12 +202,7 @@ export class DharmYudhGame {
         }
       }
 
-      if (this.state === 'result') {
-        if (this.input.keyJustPressed['Enter'] || this.input.mouseClicked) {
-          this.state = 'menu';
-          this.audio.playSfx('select');
-        }
-      }
+      // UI system handles result and pause inputs
 
       // Fixed update physics ticks
       accumulator += dt;
@@ -212,14 +228,6 @@ export class DharmYudhGame {
 
   confirmCharacter() {
     this.playerChar = CHARACTERS[this.selectedChar];
-
-    // Check if character is locked
-    const locked = this.storage.data.progression.unlocks.lockedCharacters;
-    if (locked.includes(this.playerChar.id)) {
-      this.audio.playSfx('death');
-      this.showToast('WARRIOR IS LOCKED! BEAT ARCADE TO UNLOCK.');
-      return;
-    }
     
     if (this.gameMode === 'story') {
       this.story.startCampaign(this.playerChar.id);
@@ -243,11 +251,39 @@ export class DharmYudhGame {
 
     this.audio.startMusic();
     this.showToast(`${this.playerChar.name} VS ${this.enemyChar.name}!`);
+
+    // ─── RIVAL DIALOGUE EASTER EGG ────────────────────
+    const rivalPairs = {
+      'arjuna_karna': 'Arjuna: "Karna! This battle will decide who is the greatest!"',
+      'karna_arjuna': 'Karna: "Arjuna! The sun shines on the true warrior today!"',
+      'bhima_duryodhana': 'Bhima: "Duryodhana! I swore to break your thigh — and I will!"',
+      'duryodhana_bhima': 'Duryodhana: "Bhima! You Pandavas will never have Hastinapur!"',
+      'bhishma_arjuna': 'Bhishma: "Arjuna... I am bound by my vow. Come, grandson!"',
+      'arjuna_bhishma': 'Arjuna: "Grandsire... I will fight you with all my might!"',
+      'draupadi_duryodhana': 'Draupadi: "Duryodhana! I will wash my hair with your blood!"',
+      'duryodhana_draupadi': 'Duryodhana: "Draupadi! Your pride will be your downfall!"',
+      'abhimanyu_karna': 'Abhimanyu: "You killed my father\'s friend! Face me, Karna!"',
+      'karna_abhimanyu': 'Karna: "Young Abhimanyu... I will not go easy on you!"',
+      'yudhishthira_duryodhana': 'Yudhishthira: "Duryodhana! This war is your doing!"',
+      'duryodhana_yudhishthira': 'Duryodhana: "Yudhishthira! You gambled everything and lost!"',
+    };
+    const pairKey = `${this.playerChar.id}_${this.enemyChar.id}`;
+    const rivalLine = rivalPairs[pairKey];
+    if (rivalLine && this.gameMode !== 'training') {
+      setTimeout(() => {
+        if (this.state === 'battle') this.showToast(rivalLine);
+      }, 800);
+    }
+
     this.roundIntroTimer = 2.5;
 
     // Pick stage corresponding to the character's home or random
     const stages = ['kurukshetra', 'indraprastha', 'hastinapura', 'celestial_realm', 'forest_of_dharma', 'bridge_of_lanka'];
     this.stage.setStage(stages[Math.floor(Math.random() * stages.length)]);
+
+    // Instantiate characters immediately for intro visuals
+    this.player = new BaseCharacter(this.playerChar, true);
+    this.enemy = new BaseCharacter(this.enemyChar, false);
 
     setTimeout(() => {
       if (this.state === 'battle') this.startRound();
@@ -279,6 +315,10 @@ export class DharmYudhGame {
     this.hitStopTimer = 0;
     this.slowMo = 0;
     this.koFreezeTimer = 0;
+
+    // Reset round-specific passives (Abhimanyu's first-hit bonus, Bhishma's taunt heal)
+    if (this.player) this.player.resetRoundPassive();
+    if (this.enemy) this.enemy.resetRoundPassive();
 
     this.audio.setMusicIntensity(0.3);
     this.ui.showToast(`Round ${this.round} — FIGHT!`);
@@ -322,11 +362,11 @@ export class DharmYudhGame {
         this.comboCount = 0;
       }
 
-      // Check Astra trigger hotkeys (Q for P1, P for P2)
-      if ((this.input.keyJustPressed['q'] || this.input.keyJustPressed['Q']) && Math.abs(this.combat.karma) === 100) {
+      // Check Astra trigger hotkeys (Special conditional state)
+      if (this.input.isActionJustPressed('Special', 1) && Math.abs(this.combat.karma) === 100 && this.player.energy >= CONFIG.SPECIAL_COST) {
         this.combat.triggerAstra(this.player);
       }
-      if ((this.input.keyJustPressed['p'] || this.input.keyJustPressed['P']) && Math.abs(this.combat.karma) === 100 && this.gameMode === 'versus2p') {
+      if (this.input.isActionJustPressed('Special', 2) && Math.abs(this.combat.karma) === 100 && this.gameMode === 'versus2p' && this.enemy.energy >= CONFIG.SPECIAL_COST) {
         this.combat.triggerAstra(this.enemy);
       }
 
@@ -370,6 +410,10 @@ export class DharmYudhGame {
       // Tick active Astras
       this.combat.update(dt);
 
+      // ─── PASSIVE AURA EFFECTS ─────────────────────────
+      this._updatePassiveAuras(dt, this.player);
+      this._updatePassiveAuras(dt, this.enemy);
+
       // Check round end state
       if (this.player.died || this.enemy.died) {
         this.endRound('ko');
@@ -399,6 +443,15 @@ export class DharmYudhGame {
       entity.velocityY += CONFIG.GRAVITY * dt;
     }
 
+    // Apply acceleration / friction towards targetVelocityX
+    if (entity.targetVelocityX !== undefined && !entity.attacking && entity.hitstun <= 0) {
+      const accel = entity.grounded ? 12 : 5; // Slippier in air
+      entity.velocityX += (entity.targetVelocityX - entity.velocityX) * accel * dt;
+    } else if (entity.hitstun <= 0 && !entity.attacking) {
+      // Natural friction if targetVelocityX isn't set (safety fallback)
+      entity.velocityX *= Math.pow(0.85, dt * 60);
+    }
+
     entity.x += entity.velocityX * dt;
     entity.y += entity.velocityY * dt;
 
@@ -420,18 +473,14 @@ export class DharmYudhGame {
 
     // Movement
     let speed = entity.speed;
-    entity.blocking = !!(this.input.keys['Shift'] && entity.grounded);
+    entity.blocking = !!(this.input.isActionPressed('Block', 1) && entity.grounded);
     if (entity.blocking) speed *= 0.5;
 
     let moveIntent = 0;
-    if (this.input.keys['ArrowLeft'] || this.input.keys['a'] || this.input.keys['A']) {
-      entity.x -= speed * dt;
-      moveIntent = -1;
-    }
-    if (this.input.keys['ArrowRight'] || this.input.keys['d'] || this.input.keys['D']) {
-      entity.x += speed * dt;
-      moveIntent = 1;
-    }
+    if (this.input.isActionPressed('MoveLeft', 1)) moveIntent = -1;
+    if (this.input.isActionPressed('MoveRight', 1)) moveIntent = 1;
+    
+    entity.targetVelocityX = moveIntent * speed;
 
     // Footsteps smoke particles
     if (moveIntent !== 0 && entity.grounded && Math.random() < 0.15) {
@@ -439,30 +488,45 @@ export class DharmYudhGame {
     }
 
     // Jump
-    if ((this.input.keyJustPressed['w'] || this.input.keyJustPressed['W'] || this.input.keyJustPressed['ArrowUp']) && entity.grounded) {
+    if (this.input.isActionJustPressed('Jump', 1) && entity.grounded) {
       entity.velocityY = -650;
       entity.grounded = false;
       this.audio.playSfx('jump', rng(0.85, 1.15));
     }
 
     // Dodge
-    if ((this.input.keyJustPressed['s'] || this.input.keyJustPressed['S'] || this.input.keyJustPressed['ArrowDown']) && entity.dodgeCooldown <= 0 && entity.grounded) {
+    if (this.input.isActionJustPressed('Dodge', 1) && entity.dodgeCooldown <= 0 && entity.grounded) {
       entity.dodgeTimer = 0.15;
-      entity.dodgeCooldown = 0.6;
+      // Passive: Blade Dance reduces dodge cooldown by 20%
+      let dodgeCD = 0.6;
+      if (entity.getCooldownMultiplier) {
+        dodgeCD *= entity.getCooldownMultiplier('dodge');
+      }
+      entity.dodgeCooldown = dodgeCD;
       entity.invTimer = 0.2;
       entity.velocityX = entity.facing * -450;
       this.audio.playSfx('dodge');
     }
 
     // Attacks
-    if ((this.input.keyJustPressed['j'] || this.input.keyJustPressed['J'] || this.input.keyJustPressed['z'] || this.input.keyJustPressed['Z']) && entity.attackCooldown <= 0) {
+    if (this.input.isActionJustPressed('AttackLight', 1) && entity.attackCooldown <= 0) {
       this.performAttack(entity, opp, 'light');
     }
-    else if ((this.input.keyJustPressed['k'] || this.input.keyJustPressed['K'] || this.input.keyJustPressed['x'] || this.input.keyJustPressed['X']) && entity.attackCooldown <= 0) {
+    else if (this.input.isActionJustPressed('AttackHeavy', 1) && entity.attackCooldown <= 0) {
       this.performAttack(entity, opp, 'heavy');
     }
-    else if ((this.input.keyJustPressed['l'] || this.input.keyJustPressed['L'] || this.input.keyJustPressed['c'] || this.input.keyJustPressed['C']) && entity.specialCooldown <= 0 && entity.energy >= CONFIG.SPECIAL_COST) {
+    else if (this.input.isActionJustPressed('Special', 1) && entity.specialCooldown <= 0 && entity.energy >= CONFIG.SPECIAL_COST) {
       this.performSpecial(entity, opp);
+    }
+
+    // ─── TAUNT ──────────────────────────────────────────
+    if ((this.input.k***['t'] || this.input.k***['T']) && entity.tauntCooldown <= 0 && entity.grounded) {
+      entity.tauntCooldown = 4.0;
+      const tauntText = entity.taunts.length > 0
+        ? entity.taunts[Math.floor(Math.random() * entity.taunts.length)]
+        : 'You cannot match my strength!';
+      this.particles.spawnFloatingText(entity.x, entity.y - 100, `"${tauntText}"`, entity.color);
+      this.audio.playSfx('select');
     }
   }
 
@@ -486,9 +550,10 @@ export class DharmYudhGame {
 
     if (entity.aiState === 'approach') {
       const dir = opp.x > entity.x ? 1 : -1;
-      entity.x += dir * entity.speed * dt;
+      entity.targetVelocityX = dir * entity.speed;
     } 
     else if (entity.aiState === 'fight') {
+      entity.targetVelocityX = 0;
       // Choose attack type randomly
       if (Math.random() < 0.2 && entity.energy >= CONFIG.SPECIAL_COST && entity.specialCooldown <= 0) {
         this.performSpecial(entity, opp);
@@ -504,25 +569,20 @@ export class DharmYudhGame {
     entity.attacking = true;
     entity.attackType = type;
     entity.attackFrame = 0;
-    entity.attackCooldown = type === 'heavy' ? 0.6 : 0.35;
+    entity.hasHit = false;
+
+    // Passive: Blade Dance reduces light attack cooldown
+    let baseCooldown = type === 'heavy' ? 0.6 : 0.35;
+    if (entity.getCooldownMultiplier) {
+      baseCooldown *= entity.getCooldownMultiplier(type);
+    }
+    entity.attackCooldown = baseCooldown;
 
     // Attacking lunge velocities
     const lunge = type === 'heavy' ? 250 : 130;
     entity.velocityX = entity.facing * lunge;
 
     this.audio.playSfx(type === 'heavy' ? 'heavy' : 'hit', rng(0.9, 1.1));
-
-    // Reset attack state after animation frames
-    const dur = type === 'heavy' ? 8 : 5;
-    let frame = 0;
-    const interval = setInterval(() => {
-      frame++;
-      entity.attackFrame = frame;
-      if (frame >= dur) {
-        entity.attacking = false;
-        clearInterval(interval);
-      }
-    }, 45); // 45ms per animation frame tick
   }
 
   performSpecial(entity, opp) {
@@ -536,25 +596,14 @@ export class DharmYudhGame {
 
     entity.velocityX = entity.facing * 350;
     this.audio.playSfx('special');
-    
-    // Play full-screen special flash burst
-    this.renderer.triggerShake(12);
-
-    let frame = 0;
-    const interval = setInterval(() => {
-      frame++;
-      entity.attackFrame = frame;
-      if (frame >= 10) {
-        entity.attacking = false;
-        entity.specialActive = false;
-        clearInterval(interval);
-      }
-    }, 50);
   }
 
   checkCombatHits(attacker, defender) {
-    if (!attacker.attacking || attacker.attackFrame !== 2) return; // check hit on specific active frames
+    // Wait until weapon visually swings forward before hitbox becomes active
+    const activeFrameStart = attacker.attackType === 'heavy' ? 3 : 2;
 
+    if (!attacker.attacking || attacker.hasHit || attacker.attackFrame < activeFrameStart) return;
+      
     // Hit ranges
     let hitDist = 95;
     if (attacker.attackType === 'heavy') hitDist = 140;
@@ -562,7 +611,14 @@ export class DharmYudhGame {
 
     const actualDist = Math.abs(attacker.x - defender.x);
     if (actualDist < hitDist) {
-      // Calculate damage
+      attacker.hasHit = true;
+
+      // Call onHitLanded for passive tracking before damage
+      if (attacker.onHitLanded) {
+        attacker.onHitLanded(attacker.attackType);
+      }
+
+      // Calculate base damage
       let damage = attacker.attack;
       let knockbackX = attacker.facing * 180;
       let knockbackY = 0;
@@ -578,11 +634,29 @@ export class DharmYudhGame {
         knockbackY = -350; // Launch skyward
       }
 
-      // Combo scale modifier
-      if (attacker === this.player) {
-        this.comboCount++;
-        this.comboTimer = CONFIG.COMBO_WINDOW;
-        damage *= (1 + (this.comboCount - 1) * 0.07);
+      // ─── PASSIVE: Apply damage bonuses ────────────────
+      if (attacker.getDamageBonus) {
+        damage *= attacker.getDamageBonus(attacker.attackType);
+      }
+
+      // ─── PASSIVE: Apply knockback bonuses ─────────────
+      if (attacker.getKnockbackBonus) {
+        const kbMult = attacker.getKnockbackBonus(attacker.attackType);
+        knockbackX *= kbMult;
+        if (knockbackY !== 0) knockbackY *= kbMult;
+      }
+
+      // ─── PASSIVE: Chakravyuha Tactician - no combo scaling ──
+      if (attacker.passive && attacker.passive.id === 'chakravyuha_tactician') {
+        // Abhimanyu deals full damage regardless of combo count
+        // (skip combo scaling)
+      } else {
+        // Combo scale modifier
+        if (attacker === this.player) {
+          this.comboCount++;
+          this.comboTimer = CONFIG.COMBO_WINDOW;
+          damage *= (1 + (this.comboCount - 1) * 0.07);
+        }
       }
 
       // Apply air juggle scaling physics
@@ -593,9 +667,22 @@ export class DharmYudhGame {
       // Resolve damage
       const result = defender.takeDamage(damage, knockbackX, knockbackY);
       
+      // ─── PASSIVE: Immortal Resolve shockwave ────────
+      if (result && result.immortalSaved) {
+        // Ashwatthama survived! Trigger shockwave on attacker
+        this.particles.spawn(defender.x, defender.y - 40, { type: 'ring', color: '#00e5ff', size: 80, count: 3 });
+        this.particles.spawnFloatingText(defender.x, defender.y - 100, 'IMMORTAL!', '#00e5ff');
+        this.flashEffect = 0.6;
+        this.renderer.triggerShake(20);
+        this.audio.playSfx('counter');
+        // Push the attacker back
+        const shockDir = defender.x < attacker.x ? -1 : 1;
+        attacker.velocityX = shockDir * 350;
+        attacker.hitstun = 0.3;
+        this.ui.showToast('Ashwatthama refuses to fall!');
+      }
       if (result.hit) {
         this.screenEffects.triggerHitStop(attacker.attackType);
-        this.renderer.triggerShake(attacker.attackType === 'special' ? 18 : 8);
 
         // Track and modify Dharma/Karma balance
         if (attacker === this.player) {
@@ -622,6 +709,25 @@ export class DharmYudhGame {
             this.particles.spawnHitSparks(defender.x, defender.y - 40, attacker.color);
           }
           this.particles.spawnFloatingText(defender.x, defender.y - 80, Math.round(result.damage), '#ff3d00');
+        }
+
+        // ─── PASSIVE VISUAL EFFECTS ─────────────────────
+        if (!result.blocked) {
+          // Bhima: Vayu's Wrath - ground shockwave on heavy hit
+          if (attacker.passive && attacker.passive.id === 'vayu_wrath' && attacker.attackType === 'heavy') {
+            this.particles.spawn(attacker.x, CONFIG.GROUND_Y, { type: 'ring', color: '#ff6d00', size: 55, count: 2, life: 0.3 });
+            this.particles.spawn(attacker.x, CONFIG.GROUND_Y, { type: 'spark', color: '#ffab00', count: 8, speed: 200, gravity: 400, life: 0.25 });
+            this.renderer.triggerShake(8);
+          }
+          // Draupadi: Sacred Flame burst on max vengeance consumption
+          if (attacker.passive && attacker.passive.id === 'sacred_flame' && attacker.passiveData.vengeanceJustTriggered) {
+            attacker.passiveData.vengeanceJustTriggered = false;
+            this.particles.spawn(defender.x, defender.y - 40, { type: 'spark', color: '#ff3d00', count: 25, speed: 350, gravity: 100, life: 0.5 });
+            this.particles.spawn(defender.x, defender.y - 40, { type: 'ring', color: '#ff6d00', size: 40, life: 0.35 });
+            this.particles.spawnFloatingText(defender.x, defender.y - 120, '🔥 SACRED FLAME!', '#ff3d00');
+            this.renderer.triggerShake(12);
+            this.audio.playSfx('special');
+          }
         }
       }
     }
@@ -779,6 +885,20 @@ export class DharmYudhGame {
     // Draw Story dialogues box if active
     if (this.state === 'battle' && this.story.inDialogue) {
       this.story.draw(this.renderer.ctx);
+    }
+  }
+
+  // ─── PASSIVE AURA VISUAL EFFECTS ────────────────────────
+  _updatePassiveAuras(dt, entity) {
+    if (!entity || !entity.passive || entity.died) return;
+
+    // Duryodhana: Indomitable Will - rage aura below 30% HP
+    if (entity.passive.id === 'indomitable_will' && entity.currentHp < entity.hp * 0.3 && entity.currentHp > 0) {
+      if (Math.random() < 0.15) {
+        this.particles.spawn(entity.x + rng(-25, 25), entity.y - rng(15, 55), {
+          type: 'aura', color: '#e53935', size: rng(6, 14), life: 0.35, speed: rng(15, 40)
+        });
+      }
     }
   }
 

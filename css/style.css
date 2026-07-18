@@ -184,3 +184,164 @@ html, body {
     width: 200px;
   }
 }
+
+/* ============================================================
+   Mobile Touch Controls Overlay
+   ============================================================ */
+
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 20px 16px 24px;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.touch-controls[aria-hidden="true"] { display: none; }
+
+/* ── D-Pad ── */
+.dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  pointer-events: auto;
+  width: clamp(120px, 30vw, 200px);
+  aspect-ratio: 1;
+}
+.dpad-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.dpad-btn {
+  width: clamp(38px, 10vw, 64px);
+  height: clamp(38px, 10vw, 64px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(14px, 3.5vw, 24px);
+  background: rgba(255,255,255,0.08);
+  border: 1.5px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.7);
+  touch-action: none;
+  transition: background 0.05s;
+}
+.dpad-btn:active,
+.dpad-btn.active {
+  background: rgba(255,200,100,0.25) !important;
+  border-color: rgba(255,200,100,0.5) !important;
+  color: #ffd700 !important;
+}
+.dpad-center {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255,255,255,0.1);
+  font-size: clamp(8px, 2vw, 14px);
+  pointer-events: none;
+}
+
+/* ── Action Buttons ── */
+.btn-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(6px, 1.5vw, 12px);
+  pointer-events: auto;
+}
+.btn-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(6px, 1.5vw, 10px);
+}
+.btn-row {
+  display: flex;
+  gap: clamp(6px, 1.5vw, 10px);
+}
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(14px, 3.5vw, 24px);
+  border-radius: 12px;
+  touch-action: none;
+  transition: transform 0.05s, background 0.05s, border-color 0.05s;
+  color: rgba(255,255,255,0.85);
+  text-shadow: 0 0 8px rgba(0,0,0,0.5);
+}
+.action-btn:active,
+.action-btn.active {
+  transform: scale(0.92) !important;
+}
+.btn-light {
+  width: clamp(56px, 14vw, 90px);
+  height: clamp(56px, 14vw, 90px);
+  background: rgba(76, 175, 80, 0.3);
+  border: 2.5px solid rgba(76, 175, 80, 0.6);
+  font-weight: 700;
+}
+.btn-light:active, .btn-light.active {
+  background: rgba(76, 175, 80, 0.55) !important;
+  border-color: #4caf50 !important;
+  box-shadow: 0 0 20px rgba(76, 175, 80, 0.4);
+}
+.btn-heavy {
+  width: clamp(50px, 12vw, 78px);
+  height: clamp(50px, 12vw, 78px);
+  background: rgba(255, 112, 67, 0.3);
+  border: 2.5px solid rgba(255, 112, 67, 0.6);
+  font-weight: 700;
+}
+.btn-heavy:active, .btn-heavy.active {
+  background: rgba(255, 112, 67, 0.55) !important;
+  border-color: #ff7043 !important;
+  box-shadow: 0 0 20px rgba(255, 112, 67, 0.4);
+}
+.btn-special {
+  width: clamp(44px, 11vw, 68px);
+  height: clamp(44px, 11vw, 68px);
+  background: rgba(171, 71, 188, 0.25);
+  border: 2px solid rgba(171, 71, 188, 0.5);
+  color: #ce93d8;
+  font-size: clamp(16px, 4vw, 28px);
+}
+.btn-special:active, .btn-special.active {
+  background: rgba(171, 71, 188, 0.5) !important;
+  border-color: #ab47bc !important;
+  box-shadow: 0 0 20px rgba(171, 71, 188, 0.4);
+}
+.btn-block {
+  width: clamp(64px, 16vw, 100px);
+  height: clamp(32px, 8vw, 48px);
+  background: rgba(66, 165, 245, 0.2);
+  border: 2px solid rgba(66, 165, 245, 0.4);
+  font-size: clamp(9px, 2.2vw, 14px);
+  letter-spacing: 1px;
+  color: #90caf9;
+}
+.btn-block:active, .btn-block.active {
+  background: rgba(66, 165, 245, 0.45) !important;
+  border-color: #42a5f5 !important;
+  box-shadow: 0 0 16px rgba(66, 165, 245, 0.35);
+  color: #ffffff !important;
+}
+
+/* Hide touch controls on desktop */
+@media (hover: hover) and (pointer: fine) {
+  .touch-controls[aria-hidden="false"] {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .touch-controls {
+    padding: 10px 8px 16px;
+  }
+}

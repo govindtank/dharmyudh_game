@@ -222,6 +222,15 @@ export class SettingsPanel {
       }
     }
 
+    // Render Controls Guide Footer
+    const binds = settings.keyBindings;
+    ctx.fillStyle = 'rgba(76, 175, 80, 0.9)';
+    ctx.font = 'bold 18px Rajdhani';
+    ctx.textAlign = 'center';
+    ctx.fillText(`PLAYER 1: Move [${binds.MoveLeft.toUpperCase()},${binds.Jump.toUpperCase()},${binds.Dodge.toUpperCase()},${binds.MoveRight.toUpperCase()}] | Light [${binds.AttackLight.toUpperCase()}] | Heavy [${binds.AttackHeavy.toUpperCase()}] | Special [${binds.Special.toUpperCase()}] | Block [${binds.Block.toUpperCase()}]`, CONFIG.W / 2, CONFIG.H - 130);
+    ctx.fillStyle = 'rgba(33, 150, 243, 0.9)';
+    ctx.fillText(`PLAYER 2: Move [ARROWS] | Light [${binds.P2AttackLight.toUpperCase()}] | Heavy [${binds.P2AttackHeavy.toUpperCase()}] | Special [${binds.P2Special.toUpperCase()}] | Block [${binds.P2Block.toUpperCase()}]`, CONFIG.W / 2, CONFIG.H - 100);
+
     ctx.restore();
   }
 }

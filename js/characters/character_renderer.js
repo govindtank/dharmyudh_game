@@ -2,7 +2,7 @@
 // DHARMYUDH - Detailed Character Renderer (Skeletal/Joint-Based)
 // ============================================================
 
-import { lerp, clamp } from '../engine/config.js';
+import { CONFIG, lerp, clamp } from '../engine/config.js';
 
 export class CharacterRenderer {
   constructor(animEngine) {
@@ -22,15 +22,23 @@ export class CharacterRenderer {
 
     ctx.save();
     
+    // Global transparency
+    ctx.globalAlpha = pose.alpha;
+
+    // Draw dynamic drop shadow (scales based on height)
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    const shadowScale = clamp(1 - (CONFIG.GROUND_Y - entity.y) * 0.005, 0.2, 1);
+    ctx.beginPath();
+    ctx.ellipse(entity.x, CONFIG.GROUND_Y, 35 * shadowScale, 8 * shadowScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    
     // Position character center pivot
     ctx.translate(entity.x, entity.y);
     ctx.scale(entity.facing * pose.scaleX, pose.scaleY);
-    
     // Apply general hit-flash styling
     let isFlashing = entity.hitFlash > 0;
-
-    // Global transparency
-    ctx.globalAlpha = pose.alpha;
 
     // Retrieve warrior colors
     const colors = entity.colors || {
@@ -147,9 +155,9 @@ export class CharacterRenderer {
     ctx.fillRect(-22, ny, 44, 12);
 
     // Torso Base (Chest & Abdomen)
-    const chestGrad = ctx.createLinearGradient(-20, ny, 20, hy);
-    chestGrad.addColorStop(0, colors.cloth);
-    chestGrad.addColorStop(1, colors.clothLight);
+    const chestGrad = ctx.createRadialGradient(0, ny + 20, 5, 0, ny + 20, 35);
+    chestGrad.addColorStop(0, colors.clothLight);
+    chestGrad.addColorStop(1, colors.cloth);
     ctx.fillStyle = chestGrad;
     ctx.fillRect(-20, ny + 10, 40, hy - ny - 10);
 
@@ -207,16 +215,25 @@ export class CharacterRenderer {
     ctx.fillStyle = colors.gold;
     ctx.fillRect(-8, 0, 16, 6);
 
-    // Upper Arm (Skin)
-    ctx.fillStyle = colors.skin;
-    ctx.fillRect(-6, 6, 12, 14);
+    // Upper Arm (Skin) - Anatomical Bicep Curve
+    const armGrad = ctx.createLinearGradient(-8, 6, 8, 20);
+    armGrad.addColorStop(0, colors.skinLight || colors.skin);
+    armGrad.addColorStop(1, colors.skinShadow);
+    ctx.fillStyle = armGrad;
+    ctx.beginPath();
+    ctx.moveTo(-6, 6);
+    ctx.quadraticCurveTo(-10, 13, -5, 20); // Outer bicep bulge
+    ctx.lineTo(5, 20);
+    ctx.quadraticCurveTo(8, 13, 6, 6); // Inner arm curve
+    ctx.closePath();
+    ctx.fill();
 
     // Elbow Joint (Wrist Band / Kangan)
     ctx.fillStyle = colors.gold;
     ctx.fillRect(-5, 20, 10, 5);
 
     // Forearm
-    ctx.fillStyle = colors.skin;
+    ctx.fillStyle = armGrad;
     ctx.fillRect(-4, 25, 8, 12);
 
     ctx.restore();
@@ -245,16 +262,25 @@ export class CharacterRenderer {
     ctx.fillStyle = colors.gold;
     ctx.fillRect(-7, 24, 14, 4);
 
-    // Lower Leg (Skin)
-    ctx.fillStyle = colors.skin;
-    ctx.fillRect(-6, 28, 12, 18);
+    // Lower Leg (Skin) - Anatomical Calf Curve
+    const legGrad = ctx.createLinearGradient(-8, 28, 8, 42);
+    legGrad.addColorStop(0, colors.skinLight || colors.skin);
+    legGrad.addColorStop(1, colors.skinShadow);
+    ctx.fillStyle = legGrad;
+    ctx.beginPath();
+    ctx.moveTo(-6, 28);
+    ctx.quadraticCurveTo(-11, 35, -6, 42); // Calf muscle bulge
+    ctx.lineTo(6, 42);
+    ctx.lineTo(6, 28);
+    ctx.closePath();
+    ctx.fill();
 
     // Golden Anklet (Payal)
     ctx.fillStyle = colors.gold;
     ctx.fillRect(-6, 42, 12, 3);
 
     // Foot
-    ctx.fillStyle = colors.skin;
+    ctx.fillStyle = legGrad;
     ctx.fillRect(-6, 45, 14, 7);
 
     ctx.restore();
@@ -278,11 +304,13 @@ export class CharacterRenderer {
     switch (type) {
       case 'Gandiva Bow':
       case 'Vijaya Bow': {
-        // Draw Bow Arc
+        // Draw Authentic Recurve Bow Arc
         ctx.strokeStyle = colors.gold;
         ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.arc(0, 0, 32, -Math.PI/2, Math.PI/2);
+        ctx.moveTo(0, -36); // Top tip
+        ctx.bezierCurveTo(22, -36, 18, -10, 6, 0); // Top recurve
+        ctx.bezierCurveTo(18, 10, 22, 36, 0, 36); // Bottom recurve
         ctx.stroke();
 
         // Draw Bowstring
@@ -316,58 +344,84 @@ export class CharacterRenderer {
 
       case 'Gada (Mace)':
       case 'Iron Mace': {
-        // Mace Handle
-        ctx.strokeStyle = '#5d4037';
-        ctx.lineWidth = 3.5;
+        // Thick Wooden/Iron Shaft
+        ctx.strokeStyle = '#3e2723';
+        ctx.lineWidth = 4.5;
         ctx.beginPath();
-        ctx.moveTo(0, 10);
-        ctx.lineTo(0, -25);
+        ctx.moveTo(0, 12);
+        ctx.lineTo(0, -28);
         ctx.stroke();
 
-        // Mace Crown Head
-        const headRadius = type === 'Gada (Mace)' ? 16 : 14;
-        const gadColor = type === 'Gada (Mace)' ? colors.gold : '#616161';
+        // Authentic Heavy Fluted Gada Head
+        const headRadius = type === 'Gada (Mace)' ? 18 : 15;
+        const gadColor = type === 'Gada (Mace)' ? colors.gold : '#757575';
+        const gadShadow = type === 'Gada (Mace)' ? colors.goldShadow : '#424242';
         
-        ctx.fillStyle = gadColor;
+        const maceGrad = ctx.createRadialGradient(-5, -38, 5, 0, -35, headRadius);
+        maceGrad.addColorStop(0, '#ffffff');
+        maceGrad.addColorStop(0.3, gadColor);
+        maceGrad.addColorStop(1, gadShadow);
+        ctx.fillStyle = maceGrad;
+        
+        // Draw fluted (ribbed) edges for the mace
         ctx.beginPath();
-        ctx.arc(0, -32, headRadius, 0, Math.PI * 2);
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          const nx = Math.cos(angle) * headRadius;
+          const ny = -35 + Math.sin(angle) * headRadius;
+          // Rib curves
+          if (i === 0) ctx.moveTo(nx, ny);
+          else ctx.quadraticCurveTo(0, -35, nx, ny);
+        }
+        ctx.closePath();
         ctx.fill();
 
-        // Spikes/Studs surrounding mace head
-        ctx.fillStyle = colors.gold;
-        for (let a = 0; a < 6; a++) {
-          const angle = (a / 6) * Math.PI * 2;
-          const sx = Math.cos(angle) * (headRadius + 2);
-          const sy = -32 + Math.sin(angle) * (headRadius + 2);
-          ctx.beginPath();
-          ctx.arc(sx, sy, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        // Top finial (point)
+        ctx.fillStyle = gadColor;
+        ctx.beginPath();
+        ctx.moveTo(-3, -35 - headRadius);
+        ctx.lineTo(3, -35 - headRadius);
+        ctx.lineTo(0, -45 - headRadius);
+        ctx.closePath();
+        ctx.fill();
         break;
       }
 
       case 'Sword & Shield':
       case 'Sword': {
-        // Draw Sword Blade
-        const bladeGrad = ctx.createLinearGradient(-3, -35, 3, 0);
+        // Draw Authentic Curved Talwar/Khanda Blade
+        const bladeGrad = ctx.createLinearGradient(-3, -40, 4, 0);
         bladeGrad.addColorStop(0, '#ffffff');
-        bladeGrad.addColorStop(1, '#757575');
+        bladeGrad.addColorStop(1, '#9e9e9e');
         ctx.fillStyle = isFlashing ? '#ffffff' : bladeGrad;
         
         ctx.beginPath();
-        ctx.moveTo(-3, 0);
-        ctx.lineTo(-3, -40);
-        ctx.lineTo(0, -48); // sharp tip
-        ctx.lineTo(3, -40);
+        ctx.moveTo(-2, 0);
+        ctx.lineTo(-2, -35); // Straight base
+        ctx.quadraticCurveTo(-2, -55, 12, -60); // Distinct Indian sword curve
+        ctx.quadraticCurveTo(6, -40, 4, -20); // Inner curve
         ctx.lineTo(3, 0);
         ctx.closePath();
         ctx.fill();
 
-        // Sword Crossguard / Hilt
+        // Indian Basket Hilt (Hand Guard)
         ctx.fillStyle = colors.gold;
-        ctx.fillRect(-10, 0, 20, 4);
-        ctx.fillStyle = '#5d4037';
-        ctx.fillRect(-2, 4, 4, 10); // handle
+        ctx.fillRect(-8, -2, 16, 4); // Crossguard
+        
+        ctx.strokeStyle = colors.goldShadow;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(0, 5, 8, Math.PI, Math.PI * 2.5); // Knuckle guard loop
+        ctx.stroke();
+
+        ctx.fillStyle = '#4e342e'; // Leather/wood grip
+        ctx.fillRect(-2, 2, 4, 10);
+        
+        // Pommel spike
+        ctx.fillStyle = colors.gold;
+        ctx.beginPath();
+        ctx.arc(0, 13, 3, 0, Math.PI*2);
+        ctx.fill();
         break;
       }
 
