@@ -13,6 +13,8 @@ const CONFIG = {
   ENERGY_REGEN: 14,
   SPECIAL_COST: 50,
   SPECIAL_COOLDOWN: 2.5,
+  MAX_PARTICLES: 800,       // Hard cap for mobile safety
+  PARTICLE_SKIP_MOBILE: .3, // Skip prob on mobile (0 = never, 1 = always)
 };
 
 function lerp(a,b,t){return a+(b-a)*t}
@@ -405,25 +407,29 @@ class AudioEngine {
   stopMusic(){this.musicPlaying=false;if(this._pulseInterval)clearInterval(this._pulseInterval);this.musicOscs.forEach(o=>{try{o.stop()}catch(e){}});this.musicOscs=[];this.stopCrowd();}
 }
 
-// ─── PARTICLE SYSTEM (enhanced) ────────────────────────────
+// ─── PARTICLE SYSTEM (performance-optimized with object pooling) ─
 class Particle {
-  constructor(x,y,cfg={}){
+  constructor(){this.trailPos=[];this.maxTrail=6;this.reset(0,0,{});}
+  reset(x,y,cfg={}){
     this.x=x;this.y=y;
     this.type=cfg.type||'spark';
     this.life=cfg.life||1;this.maxLife=this.life;
     this.size=cfg.size||4;this.speed=cfg.speed||200;
-    this.angle=cfg.angle||Math.random()*Math.PI*2;
-    this.vx=Math.cos(this.angle)*this.speed;this.vy=Math.sin(this.angle)*this.speed;
+    const a=cfg.angle!=null?cfg.angle:(cfg.spread?0:Math.random()*Math.PI*2);
+    this.angle=a;
+    this.vx=Math.cos(a)*this.speed;this.vy=Math.sin(a)*this.speed;
     this.gravity=cfg.gravity||0;this.drag=cfg.drag||.97;
-    this.color=cfg.color||'#ff6b35';this.colors=cfg.colors||null;
+    this._colorCache=Array.isArray(cfg.color)?cfg.color:null;
+    this.color=Array.isArray(cfg.color)?cfg.color[Math.floor(Math.random()*cfg.color.length)]:(cfg.color||'#ff6b35');
+    this.colors=cfg.colors||null;
     this.alpha=1;this.rotation=Math.random()*Math.PI*2;this.rotSpeed=(Math.random()-.5)*10;
-    this.trail=cfg.trail||false;this.trailPos=[];this.maxTrail=6;
+    this.trail=cfg.trail||false;this.trailPos.length=0;
     this.fadeOut=cfg.fadeOut!==false;this.scaleX=1;this.scaleY=1;
     this._text=cfg.text||null;
+    return this;
   }
   update(dt){
-    this.trailPos.push({x:this.x,y:this.y});
-    if(this.trailPos.length>this.maxTrail) this.trailPos.shift();
+    if(this.trail&&this.trailPos.length<this.maxTrail) this.trailPos.push({x:this.x,y:this.y});
     this.vx*=this.drag;this.vy*=this.drag;this.vy+=this.gravity*dt;
     this.x+=this.vx*dt;this.y+=this.vy*dt;
     this.rotation+=this.rotSpeed*dt;this.life-=dt;
@@ -445,10 +451,11 @@ class Particle {
       case 'spark':
         ctx.fillStyle=c;ctx.shadowColor=c;ctx.shadowBlur=12;
         ctx.beginPath();ctx.arc(0,0,this.size*this.alpha,0,Math.PI*2);ctx.fill();break;
-      case 'glow':
+      case 'glow':{
         const g=ctx.createRadialGradient(0,0,0,0,0,this.size*3);
         g.addColorStop(0,c);g.addColorStop(1,'transparent');
         ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,this.size*3,0,Math.PI*2);ctx.fill();break;
+      }
       case 'ring':
         ctx.strokeStyle=c;ctx.lineWidth=2;
         ctx.beginPath();ctx.arc(0,0,this.size*(1+(1-this.alpha)*3),0,Math.PI*2);ctx.stroke();break;
@@ -479,25 +486,42 @@ class Particle {
 }
 
 class ParticleSystem {
-  constructor(){this.particles=[]}
+  constructor(game){
+    this.game=game;
+    this.particles=[];this.pool=[];
+  }
+  _alloc(x,y,cfg={}){
+    let p;
+    if(this.pool.length>0){p=this.pool.pop();}else{p=new Particle();}
+    p.reset(x,y,cfg);
+    this.particles.push(p);
+    return p;
+  }
   emit(x,y,cfg={}){
     const c=cfg.count||10;
+    // Cap particles to prevent lag
+    const skip=!cfg._force&&this.particles.length+this.pool.length>CONFIG.MAX_PARTICLES;
+    const skipMobile=this.game&&this.game.isMobile&&CONFIG.PARTICLE_SKIP_MOBILE>Math.random();
+    const spread=cfg.spread;
+    const baseAngle=cfg.angle||0;
     for(let i=0;i<c;i++){
-      this.particles.push(new Particle(x,y,{
+      if(skip&&Math.random()<.5)continue;
+      if(skipMobile&&Math.random()<CONFIG.PARTICLE_SKIP_MOBILE)continue;
+      const a=spread?baseAngle+(Math.random()-.5)*spread:Math.random()*Math.PI*2;
+      this._alloc(x,y,{
         type:cfg.type||'spark',life:(cfg.life||.5)*(.7+Math.random()*.6),
         size:(cfg.size||4)*(.5+Math.random()),
         speed:(cfg.speed||200)*(.5+Math.random()),
-        angle:cfg.spread?cfg.angle+(Math.random()-.5)*cfg.spread:Math.random()*Math.PI*2,
-        color:Array.isArray(cfg.color)?cfg.color[Math.floor(Math.random()*cfg.color.length)]:cfg.color||'#ff6b35',
+        angle:a,
+        color:Array.isArray(cfg.color)?cfg.color:[cfg.color||'#ff6b35'],
         colors:cfg.colors||null,gravity:cfg.gravity||0,drag:cfg.drag||.97,
         trail:cfg.trail||false,fadeOut:cfg.fadeOut!==false,
         text:cfg.text||null,
-      }));
+      });
     }
   }
   emitText(x,y,text,color='#ffd700',size=28){
-    const p=new Particle(x,y,{type:'text',life:.9,size,color,gravity:-120,speed:120,angle:-Math.PI/2,fadeOut:true,drag:.9,text});
-    this.particles.push(p);
+    this._alloc(x,y,{type:'text',life:.9,size,color,gravity:-120,speed:120,angle:-Math.PI/2,fadeOut:true,drag:.9,text});
   }
   hitSparks(x,y,color='#ff6b35'){
     this.emit(x,y,{count:20,type:'spark',speed:400,life:.35,size:3,spread:Math.PI,color:[color,'#ffffff','#ffd700'],gravity:350,drag:.93});
@@ -526,9 +550,23 @@ class ParticleSystem {
   }
   footstep(x,y){this.emit(x,y,{count:2,type:'smoke',speed:20,life:.2,size:7,spread:.5,color:'#665544',gravity:0});}
   land(x,y){this.emit(x,y,{count:5,type:'smoke',speed:40,life:.25,size:10,spread:.3,color:'#776655',gravity:0});}
-  update(dt){for(let i=this.particles.length-1;i>=0;i--){this.particles[i].update(dt);if(this.particles[i].dead)this.particles.splice(i,1);}}
-  draw(ctx){for(const p of this.particles)p.draw(ctx);}
-  clear(){this.particles.length=0;}
+  update(dt){
+    let writeIdx=0;
+    for(let i=0,len=this.particles.length;i<len;i++){
+      const p=this.particles[i];
+      p.update(dt);
+      if(p.dead){this.pool.push(p);continue;}
+      this.particles[writeIdx++]=p;
+    }
+    this.particles.length=writeIdx;
+  }
+  draw(ctx){
+    for(let i=0,len=this.particles.length;i<len;i++){this.particles[i].draw(ctx);}
+  }
+  clear(){
+    for(let i=0;i<this.particles.length;i++){this.pool.push(this.particles[i]);}
+    this.particles.length=0;
+  }
 }
 
 // ─── ANIMATION HELPERS ─────────────────────────────────────
@@ -1517,7 +1555,7 @@ const CHARACTERS = [
   }
 ];
 
-// ─── BACKGROUND SYSTEM (enhanced with dynamic elements) ────
+// ─── BACKGROUND SYSTEM (enhanced with dynamic elements & cached gradients) ─
 class BackgroundSystem {
   constructor(game){
     this.game=game;
@@ -1528,6 +1566,29 @@ class BackgroundSystem {
     for(let i=0;i<6;i++) this.torches.push({x:40+i*250,y:CONFIG.GROUND_Y-5,flameOffset:Math.random()*Math.PI*2,intensity:.6+Math.random()*.4});
     for(let i=0;i<4;i++) this.banners.push({x:120+i*400,y:CONFIG.GROUND_Y-70,color:i%2===0?'#b71c1c':'#ffd700',waveOffset:i*1.7});
     for(let i=0;i<15;i++) this.fireflies.push({x:Math.random()*CONFIG.W,y:50+Math.random()*(CONFIG.GROUND_Y-100),speed:.3+Math.random()*.7,phase:Math.random()*Math.PI*2,size:1+Math.random()*2});
+    // Pre-cache gradients
+    this._gradients = {};
+    this._buildGradients();
+    // Offscreen canvas for static background elements
+    this._bgCanvas = null;
+  }
+  _buildGradients(){
+    const W=CONFIG.W,H=CONFIG.H,GY=CONFIG.GROUND_Y;
+    // Sky gradient
+    const sky=document.createElement('canvas').getContext('2d').createLinearGradient(0,0,0,GY);
+    sky.addColorStop(0,'#070720');sky.addColorStop(.3,'#0a0a2e');
+    sky.addColorStop(.5,'#1a0a2e');sky.addColorStop(.7,'#2a1520');
+    sky.addColorStop(1,'#2a1a10');
+    this._gradients.sky=sky;
+    // Ground gradient
+    const gr=document.createElement('canvas').getContext('2d').createLinearGradient(0,GY,0,H);
+    gr.addColorStop(0,'#4a3520');gr.addColorStop(.08,'#3a2510');
+    gr.addColorStop(.35,'#2a1a0a');gr.addColorStop(1,'#150800');
+    this._gradients.ground=gr;
+    // Moon glow gradient
+    const mg=document.createElement('canvas').getContext('2d').createRadialGradient(1000,100,0,1000,100,100);
+    mg.addColorStop(0,'rgba(255,230,180,.15)');mg.addColorStop(.5,'rgba(255,220,150,.08)');mg.addColorStop(1,'transparent');
+    this._gradients.moon=mg;
   }
   update(dt){
     this.time+=dt;
@@ -1540,12 +1601,8 @@ class BackgroundSystem {
   }
   draw(ctx){
     const W=CONFIG.W,H=CONFIG.H;
-    // Sky
-    const sky=ctx.createLinearGradient(0,0,0,CONFIG.GROUND_Y);
-    sky.addColorStop(0,'#070720');sky.addColorStop(.3,'#0a0a2e');
-    sky.addColorStop(.5,'#1a0a2e');sky.addColorStop(.7,'#2a1520');
-    sky.addColorStop(1,'#2a1a10');
-    ctx.fillStyle=sky;ctx.fillRect(0,0,W,CONFIG.GROUND_Y);
+    // Sky (cached gradient)
+    ctx.fillStyle=this._gradients.sky;ctx.fillRect(0,0,W,CONFIG.GROUND_Y);
     
     // Stars
     for(const s of this.stars){
@@ -1558,11 +1615,9 @@ class BackgroundSystem {
     }
     ctx.globalAlpha=1;
     
-    // Moon
+    // Moon (cached glow gradient)
     ctx.save();
-    const mg=ctx.createRadialGradient(1000,100,0,1000,100,100);
-    mg.addColorStop(0,'rgba(255,230,180,.15)');mg.addColorStop(.5,'rgba(255,220,150,.08)');mg.addColorStop(1,'transparent');
-    ctx.fillStyle=mg;ctx.beginPath();ctx.arc(1000,100,100,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=this._gradients.moon;ctx.beginPath();ctx.arc(1000,100,100,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='rgba(255,220,150,.12)';ctx.beginPath();ctx.arc(1000,100,50,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='rgba(255,220,150,.18)';ctx.beginPath();ctx.arc(1000,100,30,0,Math.PI*2);ctx.fill();
     // Moon glow
@@ -1596,11 +1651,8 @@ class BackgroundSystem {
       ctx.quadraticCurveTo(mx,CONFIG.GROUND_Y-mh,mx+150,CONFIG.GROUND_Y);ctx.fill();
     }
     
-    // Ground
-    const gr=ctx.createLinearGradient(0,CONFIG.GROUND_Y,0,H);
-    gr.addColorStop(0,'#4a3520');gr.addColorStop(.08,'#3a2510');
-    gr.addColorStop(.35,'#2a1a0a');gr.addColorStop(1,'#150800');
-    ctx.fillStyle=gr;ctx.fillRect(0,CONFIG.GROUND_Y,W,H-CONFIG.GROUND_Y);
+    // Ground (cached gradient)
+    ctx.fillStyle=this._gradients.ground;ctx.fillRect(0,CONFIG.GROUND_Y,W,H-CONFIG.GROUND_Y);
     
     // Ground texture
     ctx.strokeStyle='rgba(100,70,40,.1)';ctx.lineWidth=1;
@@ -1680,7 +1732,7 @@ class DharmYudhGame {
     this.W=this.canvas.width=CONFIG.W;
     this.H=this.canvas.height=CONFIG.H;
     this.audio=new AudioEngine();
-    this.particles=new ParticleSystem();
+    this.particles=new ParticleSystem(this);
     this.background=new BackgroundSystem(this);
     this.camera=new Camera();
     this.state='loading';
@@ -1690,7 +1742,7 @@ class DharmYudhGame {
     this.round=1;this.playerWins=0;this.enemyWins=0;this.maxRounds=3;
     this.comboCount=0;this.hitStopTimer=0;this.slowMo=0;
     this.battleTimer=0;this.maxBattleTime=60;
-    this.damageNumbers=[];this.roundIntroTimer=0;
+    this.damageNumbers=[];this._damageNumPool=[];this.roundIntroTimer=0;
     this.gameMode='versus';this.survivalWave=1;this.survivalKills=0;
     this.difficulty='normal';
     this.keys={};this.lastKeyPress=0;this.keyJustPressed={};
@@ -1900,6 +1952,14 @@ class DharmYudhGame {
   }
   showToast(msg){this.toastMessage=msg;this.toastTimer=2;}
 
+  _addDamageNum(x,y,text,color,life,vy){
+    let d;
+    if(this._damageNumPool.length>0){d=this._damageNumPool.pop();}else{d={};}
+    d.x=x;d.y=y;d.text=text;d.color=color;d.life=life;d.maxLife=life;d.vy=vy;
+    this.damageNumbers.push(d);
+    return d;
+  }
+
   update(dt){
     if(dt>.05)dt=.05;
     this.animFrame=(this.animFrame||0)+1;
@@ -1994,7 +2054,7 @@ class DharmYudhGame {
         this.particles.specialBurst(entity.x,entity.y-30,'#ff0000');
         this.screenShake=10;this.audio.playSfx('special',1.3);
         this.flashEffect=.5;
-        this.damageNumbers.push({x:entity.x,y:entity.y-60,text:'RAGE!',color:'#ff0000',life:1.2,maxLife:1.2,vy:-120});
+        this._addDamageNum(entity.x,entity.y-60,'RAGE!','#ff0000',1.2,-120);
       }
     }
     if(entity.rageActive){
@@ -2260,7 +2320,7 @@ class DharmYudhGame {
           this.particles.emit((attacker.x+defender.x)/2,defender.y-20,{count:12,type:'ring',speed:0,life:.4,size:15,color:'#00ffff'});
           this.screenShake=10;this.hitStopTimer=.1;
           this.audio.playSfx('counter');
-          this.damageNumbers.push({x:defender.x,y:defender.y-50,text:'PARRY!',color:'#00ffff',life:.8,maxLife:.8,vy:-120});
+          this._addDamageNum(defender.x,defender.y-50,'PARRY!','#00ffff',.8,-120);
           defender.parryFrames=10; // prevent chain parry
           defender.currentHp=Math.max(0,defender.currentHp-damage);
           attacker.attacking=false;return;
@@ -2296,7 +2356,7 @@ class DharmYudhGame {
             defender.hitstun=.3;defender.velocityX=kd*20;
             damage*=1.15; // juggle bonus
             this.particles.hitSparks(defender.x,defender.y-30,'#00ccff');
-            this.damageNumbers.push({x:defender.x,y:defender.y-60,text:'AIR!',color:'#00ccff',life:.6,maxLife:.6,vy:-100});
+            this._addDamageNum(defender.x,defender.y-60,'AIR!','#00ccff',.6,-100);
           }else if(!defender.grounded&&attacker.airJuggleCount>=3){
             // Max juggle reached — hard knock down
             defender.velocityY=-350;defender.velocityX=kd*120;
@@ -2304,7 +2364,7 @@ class DharmYudhGame {
             this.screenShake=18;
           }
           
-          this.damageNumbers.push({x:defender.x,y:defender.y-40,text:Math.ceil(damage).toString(),color:isHeavy?'#ff4400':'#ffd700',life:.8,maxLife:.8,vy:-80-rng(0,40)});
+          this._addDamageNum(defender.x,defender.y-40,Math.ceil(damage).toString(),isHeavy?'#ff4400':'#ffd700',.8,-80-rng(0,40));
           attacker.damageDealt+=damage;
         }
         defender.currentHp=Math.max(0,defender.currentHp-damage);
@@ -2347,7 +2407,7 @@ class DharmYudhGame {
         target.currentHp=Math.max(0,target.currentHp-damage);
         target.hitFlash=1;target.hitstun=.5;
         target.velocityX=(target.x>user.x?1:-1)*100;target.velocityY=-200;target.grounded=false;
-        this.damageNumbers.push({x:target.x,y:target.y-60,text:Math.ceil(damage).toString(),color:'#ff00ff',life:1.1,maxLife:1.1,vy:-120});
+        this._addDamageNum(target.x,target.y-60,Math.ceil(damage).toString(),'#ff00ff',1.1,-120);
         this.slowMo=.25;
         this.particles.hitSparks(target.x,target.y-20,'#ffffff');
         this.audio.playSfx('hit',1.5);
@@ -2657,10 +2717,17 @@ class DharmYudhGame {
   }
 
   drawDamageNumbers(ctx){
-    for(let i=this.damageNumbers.length-1;i>=0;i--){
+    let writeIdx=0;
+    for(let i=0,len=this.damageNumbers.length;i<len;i++){
       const d=this.damageNumbers[i];
       d.y+=d.vy*(1/60);d.life-=1/60;d.vy*=.97;
-      if(d.life<=0){this.damageNumbers.splice(i,1);continue;}
+      if(d.life<=0){this._damageNumPool.push(d);continue;}
+      this.damageNumbers[writeIdx++]=d;
+    }
+    this.damageNumbers.length=writeIdx;
+    // Draw all active damage numbers
+    for(let i=0,len=this.damageNumbers.length;i<len;i++){
+      const d=this.damageNumbers[i];
       ctx.save();ctx.globalAlpha=d.life/d.maxLife;
       ctx.textAlign='center';
       ctx.font=`bold ${28+(1-d.life/d.maxLife)*8}px Rajdhani,sans-serif`;
