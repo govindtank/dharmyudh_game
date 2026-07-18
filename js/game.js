@@ -1925,6 +1925,9 @@ class DharmYudhGame {
       rageActive:false,rageTimer:0,rageUsed:false,parryFrames:0,airJuggleCount:0,
       // AI state
       aiState:'approach',aiTimer:0,aiLastAction:'',aiComboChain:0,aiOppLastAttacking:false,aiPunishWindow:0,
+      // AI v2: Pattern recognition, wake-up, rage awareness
+      aiActionHistory:[],aiPatterns:{attackFreq:0,blockFreq:0,jumpFreq:0,dodgeFreq:0,specialFreq:0,lastPatternScan:0},
+      aiWakeupMode:'',aiRageDefensive:false,aiAggressiveTimer:0,aiNextAction:'',aiWasHitstun:false,
     };
   }
   startRound(){
@@ -2125,7 +2128,58 @@ class DharmYudhGame {
   }
   
   updateAI(entity,dt,opp){
-    if(entity.attacking||entity.hitstun>0)return;
+    if(entity.attacking||entity.hitstun>0){
+      entity.aiWasHitstun=true;return;
+    }
+    
+    // ─── WAKE-UP: entity just recovered from hitstun ───
+    if(entity.aiWasHitstun){
+      entity.aiWasHitstun=false;
+      const dist=Math.abs(entity.x-opp.x);
+      const r=Math.random();
+      const hpLow=entity.currentHp/entity.stats.hp<.35;
+      const oppClose=dist<130;
+      // Choose wake-up based on situation and difficulty
+      const wakeDifficulty=this.difficulty==='hard'?1:(this.difficulty==='normal'?.6:.3);
+      if(oppClose&&entity.energy>=CONFIG.SPECIAL_COST&&entity.specialCooldown<=0&&r<.15*wakeDifficulty)
+        entity.aiWakeupMode='special_wake';  // Reversal special
+      else if(oppClose&&r<.25*wakeDifficulty)
+        entity.aiWakeupMode='dodge_wake';     // Backdash away
+      else if(oppClose&&r<.15*wakeDifficulty)
+        entity.aiWakeupMode='attack_wake';    // Mash out
+      else if(!oppClose&&r<.15*wakeDifficulty)
+        entity.aiWakeupMode='jump_wake';      // Jump to reposition
+      else
+        entity.aiWakeupMode='block_wake';     // Safe block
+    }
+    
+    // ─── WAKE-UP EXECUTION ───
+    if(entity.aiWakeupMode){
+      const wm=entity.aiWakeupMode;
+      entity.aiWakeupMode='';
+      if(wm==='block_wake'){
+        entity.blocking=true;entity.blockTimer=.25+Math.random()*.15;
+        entity.aiLastAction='wake_block';
+      }else if(wm==='dodge_wake'){
+        if(entity.dodgeCooldown<=0&&entity.grounded){
+          entity.dodgeTimer=.15;entity.dodgeCooldown=.6;entity.invTimer=.2;
+          entity.velocityX=entity.facing*-450;
+          this.audio.playSfx('dodge',rng(.9,1.1));
+          entity.aiLastAction='wake_dodge';
+        }else entity.blocking=true;
+      }else if(wm==='special_wake'){
+        if(entity.energy>=CONFIG.SPECIAL_COST&&entity.specialCooldown<=0){
+          this.performSpecial(entity,opp);entity.stateTimer=1.0;entity.aiLastAction='wake_special';
+        }else entity.blocking=true;
+      }else if(wm==='jump_wake'){
+        if(entity.grounded){entity.velocityY=-580;entity.grounded=false;
+        entity.aiLastAction='wake_jump';}
+      }else if(wm==='attack_wake'){
+        if(entity.attackCooldown<=0){this.performAttack(entity,opp,'light');
+        entity.aiLastAction='wake_attack';}
+      }
+      entity.aiTimer=.2;return;
+    }
     entity.stateTimer-=dt;
     entity.aiTimer-=dt;
     entity.aiPunishWindow=Math.max(0,entity.aiPunishWindow-dt);
@@ -2158,6 +2212,80 @@ class DharmYudhGame {
     // Dynamic aggression: losing = more aggressive, winning = defensive
     const aggroMod=hpRatio<.3?1.4:(hpRatio<.5?1.15:(hpRatio>.8&&oppHpRatio<.5?.7:1));
     ag*=aggroMod;bc/=aggroMod;
+
+    // ─── OPPONENT ACTION TRACKING ──────────────────────────────
+    // Record opponent's current action into rolling history
+    let oppAction='none';
+    if(opp.attacking)oppAction=opp.attackType==='special'?'special':(opp.attackType==='heavy'?'heavy':'light');
+    else if(opp.blocking)oppAction='block';
+    else if(!opp.grounded)oppAction='jump';
+    else if(opp.dodgeTimer>0||(Math.abs(opp.velocityX)>300&&!opp.attacking))oppAction='dodge';
+    entity.aiActionHistory.push(oppAction);
+    if(entity.aiActionHistory.length>12)entity.aiActionHistory.shift();
+
+    // ─── PATTERN SCAN: every ~2s, analyze player tendencies ────
+    entity.aiPatterns.lastPatternScan-=dt;
+    if(entity.aiPatterns.lastPatternScan<=0&&entity.aiActionHistory.length>=6){
+      entity.aiPatterns.lastPatternScan=1.5+Math.random()*.5;
+      const hist=entity.aiActionHistory;
+      let aC=0,bC=0,jC=0,dC=0,sC=0,tot=hist.length;
+      for(let i=0;i<tot;i++){
+        const a=hist[i];
+        if(a==='light'||a==='heavy')aC++;
+        else if(a==='block')bC++;
+        else if(a==='jump')jC++;
+        else if(a==='dodge')dC++;
+        else if(a==='special')sC++;
+      }
+      entity.aiPatterns.attackFreq=aC/tot;
+      entity.aiPatterns.blockFreq=bC/tot;
+      entity.aiPatterns.jumpFreq=jC/tot;
+      entity.aiPatterns.dodgeFreq=dC/tot;
+      entity.aiPatterns.specialFreq=sC/tot;
+    }
+
+    // ─── RAGE AWARENESS ────────────────────────────────────────
+    // If opponent is in rage mode, AI plays defensively
+    const oppRage=opp.rageActive;
+    if(oppRage){
+      ag*=0.5;        // Much less aggressive
+      bc=Math.min(bc*2.5,0.7);  // Block more
+      dc=Math.min(dc*3,0.6);    // Dodge more
+      punishWindow*=0.5;  // Don't overcommit to punishes
+      jumpChance*=0.5;    // Less jumping (vulnerable in air)
+      specialChance*=0.3; // Don't waste specials (slow recovery)
+    }
+    // If AI itself is in rage, become hyper-aggressive
+    if(entity.rageActive){
+      ag*=1.4;
+      comboChance=Math.min(comboChance*1.5,0.9);
+      specialChance=Math.min(specialChance*1.4,0.7);
+      bc*=0.5;
+    }
+
+    // ─── PATTERN-BASED ADAPTATION ──────────────────────────────
+    // Adjust strategy based on detected player tendencies
+    const p=entity.aiPatterns;
+    if(p.lastPatternScan>0){ // Only if we've scanned at least once
+      // Player jumps a lot → anti-air with light attacks when they approach
+      if(p.jumpFreq>0.25&&dist<180&&entity.grounded){
+        entity.aiLastAction='anti_air';
+      }
+      // Player blocks a lot → use more throws/grabs (heavies that guard crush)
+      if(p.blockFreq>0.4){
+        ag*=1.15; // More aggressive, force them to stop blocking
+        comboChance=Math.min(comboChance*1.2,0.8); // Longer block pressure
+      }
+      // Player dodges a lot → delay attacks to catch dodge recovery
+      if(p.dodgeFreq>0.2){
+        bc*=0.7; // Less blocking, more chasing
+      }
+      // Player spams specials → stay close to pressure them
+      if(p.specialFreq>0.2){
+        ag*=1.2; // Close the distance
+        dc=Math.min(dc*1.5,0.5); // Dodge their specials
+      }
+    }
 
     // --- WHIFF PUNISH: opponent just finished attacking ---
     if(oppWasAttacking&&!opp.attacking&&dist<140&&entity.aiPunishWindow<=0){
@@ -2194,6 +2322,13 @@ class DharmYudhGame {
     // --- OPTIMAL RANGE POSITIONING ---
     const wantClose=entity.attackCooldown<=0;
     const optimalDist=wantClose?80:180;
+
+    // --- ANTI-AIR: punish airborne opponents ---
+    if(!opp.grounded&&dist<160&&entity.grounded&&entity.attackCooldown<=0&&roll<ag*.6){
+      this.performAttack(entity,opp,'light');
+      entity.stateTimer=.4;entity.aiLastAction='anti_air';
+      entity.aiTimer=.2;return;
+    }
 
     // --- REACTIVE COUNTERS ---
     // Dodge when opponent attacks at close range
