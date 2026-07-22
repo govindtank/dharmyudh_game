@@ -30,7 +30,7 @@ export class BaseCharacter {
     this.y = CONFIG.GROUND_Y;
     this.lastX = baseX;
     this.width = 80;
-    this.height = 120;
+    this.height = 150;
     
     this.velocityX = 0;
     this.velocityY = 0;

@@ -48,12 +48,12 @@ export class CharacterRenderer {
       gold: '#ffd700', goldShadow: '#c8a000'
     };
 
-    // Joint anchors relative to character center
-    const headX = 0, headY = -105 + pose.bodyY;
-    const neckX = 0, neckY = -90 + pose.bodyY;
-    const hipsX = 0, hipsY = -45 + pose.bodyY;
-    const shoulderLX = -15, shoulderLY = -80 + pose.bodyY;
-    const shoulderRX = 15, shoulderRY = -80 + pose.bodyY;
+    // Joint anchors relative to character center (scaled for 150px realistic height)
+    const headX = 0, headY = -135 + pose.bodyY;
+    const neckX = 0, neckY = -120 + pose.bodyY;
+    const hipsX = 0, hipsY = -70 + pose.bodyY;
+    const shoulderLX = -22, shoulderLY = -110 + pose.bodyY;
+    const shoulderRX = 22, shoulderRY = -110 + pose.bodyY;
 
     // Render components in correct depth layer order (Z-indexing)
     // 1. Back Arm & Back Leg (relative to facing direction)
@@ -83,7 +83,7 @@ export class CharacterRenderer {
 
     if (isFlashing) {
       ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       return;
     }
@@ -91,50 +91,50 @@ export class CharacterRenderer {
     // Hair bun / Jata
     ctx.fillStyle = colors.hair;
     ctx.beginPath();
-    ctx.arc(0, -18, 9, 0, Math.PI * 2);
+    ctx.arc(0, -14, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // Main Head
-    const skinGrad = ctx.createLinearGradient(-15, -15, 15, 15);
+    // Main Head (Tighter human head radius)
+    const skinGrad = ctx.createLinearGradient(-11, -11, 11, 11);
     skinGrad.addColorStop(0, colors.skin);
     skinGrad.addColorStop(1, colors.skinShadow);
     ctx.fillStyle = skinGrad;
     ctx.beginPath();
-    ctx.arc(0, 0, 15, 0, Math.PI * 2);
+    ctx.arc(0, 0, 11, 0, Math.PI * 2);
     ctx.fill();
 
     // Forehead Tilak (Traditional vertical mark)
     ctx.fillStyle = '#ff3b30'; // Red Tilak
-    ctx.fillRect(-2, -8, 4, 10);
+    ctx.fillRect(-1.5, -6, 3, 7);
     ctx.fillStyle = '#ffd700'; // Yellow dot
-    ctx.beginPath(); ctx.arc(0, 3, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 2, 1.5, 0, Math.PI * 2); ctx.fill();
 
     // Eyes (Expressive)
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(3, -4, 5, 3);
+    ctx.fillRect(2, -3, 4, 2);
     ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(5, -4, 3, 3);
+    ctx.fillRect(3.5, -3, 2, 2);
 
     // Ornamented Crown (Mukut)
     ctx.fillStyle = colors.gold;
     ctx.beginPath();
-    ctx.moveTo(-16, -10);
-    ctx.lineTo(0, -32); // High central peak
-    ctx.lineTo(16, -10);
-    ctx.lineTo(0, -6);
+    ctx.moveTo(-12, -7);
+    ctx.lineTo(0, -24); // High central peak
+    ctx.lineTo(12, -7);
+    ctx.lineTo(0, -4);
     ctx.closePath();
     ctx.fill();
 
     // Crown Jewel
     ctx.fillStyle = '#00e5ff';
     ctx.beginPath();
-    ctx.arc(0, -18, 3, 0, Math.PI * 2);
+    ctx.arc(0, -13, 2, 0, Math.PI * 2);
     ctx.fill();
 
     // Gold Earrings (Kundala)
     ctx.fillStyle = colors.gold;
     ctx.beginPath();
-    ctx.arc(-15, 4, 3, 0, Math.PI * 2);
+    ctx.arc(-11, 3, 2, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
@@ -145,43 +145,45 @@ export class CharacterRenderer {
 
     if (isFlashing) {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-20, ny, 40, hy - ny);
+      ctx.fillRect(-22, ny, 44, hy - ny);
       ctx.restore();
       return;
     }
 
     // Shoulder Line
     ctx.fillStyle = colors.skin;
-    ctx.fillRect(-22, ny, 44, 12);
+    ctx.fillRect(-24, ny, 48, 14);
 
-    // Torso Base (Chest & Abdomen)
-    const chestGrad = ctx.createRadialGradient(0, ny + 20, 5, 0, ny + 20, 35);
-    chestGrad.addColorStop(0, colors.clothLight);
-    chestGrad.addColorStop(1, colors.cloth);
-    ctx.fillStyle = chestGrad;
-    ctx.fillRect(-20, ny + 10, 40, hy - ny - 10);
+    // Torso Base (Chest & Abdomen - Tapered athletic human V-shape)
+    ctx.fillStyle = colors.cloth;
+    ctx.beginPath();
+    ctx.moveTo(-22, ny + 12);
+    ctx.lineTo(22, ny + 12);
+    ctx.lineTo(12, hy);
+    ctx.lineTo(-12, hy);
+    ctx.closePath();
+    ctx.fill();
 
-    // Golden Armor Plate (Kavacha)
-    const armorGrad = ctx.createLinearGradient(-18, ny + 5, 18, hy - 10);
+    // Golden Armor Plate (Kavacha - Tapered contours)
+    const armorGrad = ctx.createLinearGradient(-20, ny + 8, 20, hy - 6);
     armorGrad.addColorStop(0, colors.armorLight);
     armorGrad.addColorStop(0.5, colors.armor);
     armorGrad.addColorStop(1, colors.armor);
     ctx.fillStyle = armorGrad;
     
-    // Curvy, muscular armor chest contours
     ctx.beginPath();
-    ctx.moveTo(-18, ny + 5);
-    ctx.lineTo(18, ny + 5);
-    ctx.lineTo(14, hy - 8);
-    ctx.lineTo(-14, hy - 8);
+    ctx.moveTo(-20, ny + 8);
+    ctx.lineTo(20, ny + 8);
+    ctx.lineTo(11, hy - 6);
+    ctx.lineTo(-11, hy - 6);
     ctx.closePath();
     ctx.fill();
 
     // Ornamented golden collar/necklace (Har)
     ctx.strokeStyle = colors.gold;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
-    ctx.arc(0, ny + 5, 12, 0, Math.PI);
+    ctx.arc(0, ny + 8, 9, 0, Math.PI);
     ctx.stroke();
 
     // Traditional Devanagari seal on breastplate
@@ -192,9 +194,9 @@ export class CharacterRenderer {
 
     // Golden Belt (Kamarbandh)
     ctx.fillStyle = colors.gold;
-    ctx.fillRect(-16, hy - 8, 32, 8);
+    ctx.fillRect(-13, hy - 6, 26, 6);
     ctx.fillStyle = colors.goldShadow;
-    ctx.fillRect(-4, hy - 8, 8, 14); // belt sash
+    ctx.fillRect(-3, hy - 6, 6, 12); // belt sash
 
     ctx.restore();
   }
@@ -206,7 +208,7 @@ export class CharacterRenderer {
 
     if (isFlashing) {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-6, 0, 12, 35);
+      ctx.fillRect(-6, 0, 12, 50);
       ctx.restore();
       return;
     }
@@ -215,26 +217,26 @@ export class CharacterRenderer {
     ctx.fillStyle = colors.gold;
     ctx.fillRect(-8, 0, 16, 6);
 
-    // Upper Arm (Skin) - Anatomical Bicep Curve
-    const armGrad = ctx.createLinearGradient(-8, 6, 8, 20);
+    // Upper Arm (Skin) - Anatomical Bicep Curve (Extended for realism)
+    const armGrad = ctx.createLinearGradient(-8, 6, 8, 30);
     armGrad.addColorStop(0, colors.skinLight || colors.skin);
     armGrad.addColorStop(1, colors.skinShadow);
     ctx.fillStyle = armGrad;
     ctx.beginPath();
     ctx.moveTo(-6, 6);
-    ctx.quadraticCurveTo(-10, 13, -5, 20); // Outer bicep bulge
-    ctx.lineTo(5, 20);
-    ctx.quadraticCurveTo(8, 13, 6, 6); // Inner arm curve
+    ctx.quadraticCurveTo(-9, 18, -4, 30); // Outer bicep bulge
+    ctx.lineTo(4, 30);
+    ctx.quadraticCurveTo(7, 18, 5, 6); // Inner arm curve
     ctx.closePath();
     ctx.fill();
 
     // Elbow Joint (Wrist Band / Kangan)
     ctx.fillStyle = colors.gold;
-    ctx.fillRect(-5, 20, 10, 5);
+    ctx.fillRect(-5, 30, 10, 5);
 
-    // Forearm
+    // Forearm (Extended)
     ctx.fillStyle = armGrad;
-    ctx.fillRect(-4, 25, 8, 12);
+    ctx.fillRect(-3.5, 35, 7, 15);
 
     ctx.restore();
   }
@@ -246,42 +248,54 @@ export class CharacterRenderer {
 
     if (isFlashing) {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-8, 0, 16, 45);
+      ctx.fillRect(-8, 0, 16, 70);
       ctx.restore();
       return;
     }
 
-    // Upper Leg w/ pleated Dhoti curves
-    const dhotiGrad = ctx.createLinearGradient(-10, 0, 10, 25);
-    dhotiGrad.addColorStop(0, colors.dhoti);
-    dhotiGrad.addColorStop(1, colors.dhotiShadow);
+    const isBackLeg = side === 'left';
+
+    // Upper Leg w/ pleated Dhoti curves (Extended, shadowed if back leg)
+    const dhotiGrad = ctx.createLinearGradient(-12, 0, 12, 35);
+    if (isBackLeg) {
+      dhotiGrad.addColorStop(0, colors.dhotiShadow);
+      dhotiGrad.addColorStop(1, '#857051'); // Darker shade of dhotiShadow
+    } else {
+      dhotiGrad.addColorStop(0, colors.dhoti);
+      dhotiGrad.addColorStop(1, colors.dhotiShadow);
+    }
     ctx.fillStyle = dhotiGrad;
-    ctx.fillRect(-9, 0, 18, 25);
+    ctx.fillRect(-10, 0, 20, 35);
 
     // Knee Band
-    ctx.fillStyle = colors.gold;
-    ctx.fillRect(-7, 24, 14, 4);
+    ctx.fillStyle = isBackLeg ? colors.goldShadow : colors.gold;
+    ctx.fillRect(-8, 34, 16, 4);
 
-    // Lower Leg (Skin) - Anatomical Calf Curve
-    const legGrad = ctx.createLinearGradient(-8, 28, 8, 42);
-    legGrad.addColorStop(0, colors.skinLight || colors.skin);
-    legGrad.addColorStop(1, colors.skinShadow);
+    // Lower Leg (Skin) - Anatomical Calf Curve (Extended, shadowed if back leg)
+    const legGrad = ctx.createLinearGradient(-8, 38, 8, 60);
+    if (isBackLeg) {
+      legGrad.addColorStop(0, colors.skinShadow);
+      legGrad.addColorStop(1, '#8a653f'); // Darker skin shadow
+    } else {
+      legGrad.addColorStop(0, colors.skinLight || colors.skin);
+      legGrad.addColorStop(1, colors.skinShadow);
+    }
     ctx.fillStyle = legGrad;
     ctx.beginPath();
-    ctx.moveTo(-6, 28);
-    ctx.quadraticCurveTo(-11, 35, -6, 42); // Calf muscle bulge
-    ctx.lineTo(6, 42);
-    ctx.lineTo(6, 28);
+    ctx.moveTo(-6, 38);
+    ctx.quadraticCurveTo(-11, 48, -5, 60); // Calf muscle bulge
+    ctx.lineTo(5, 60);
+    ctx.lineTo(5, 38);
     ctx.closePath();
     ctx.fill();
 
     // Golden Anklet (Payal)
-    ctx.fillStyle = colors.gold;
-    ctx.fillRect(-6, 42, 12, 3);
+    ctx.fillStyle = isBackLeg ? colors.goldShadow : colors.gold;
+    ctx.fillRect(-5, 60, 10, 3);
 
-    // Foot
+    // Foot (Realistic horizontal projection)
     ctx.fillStyle = legGrad;
-    ctx.fillRect(-6, 45, 14, 7);
+    ctx.fillRect(-5, 63, 14, 7);
 
     ctx.restore();
   }
@@ -290,10 +304,10 @@ export class CharacterRenderer {
     const type = entity.weapon || 'Sword';
     
     ctx.save();
-    // Translate to arm tip (hand position roughly +35px down rotated arm)
+    // Translate to arm tip (hand position roughly +50px down rotated arm)
     ctx.translate(sx, sy);
     ctx.rotate(armAngle);
-    ctx.translate(0, 35);
+    ctx.translate(0, 50);
     ctx.rotate(weaponAngle);
 
     if (isFlashing) {

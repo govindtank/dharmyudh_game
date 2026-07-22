@@ -93,33 +93,49 @@ export class InputSystem {
     // Force hidden initially
     touchControls.setAttribute('aria-hidden', 'true');
 
-    const keyMap = {
-      'up':    { key: 'ArrowUp',    mode: 'just' },
-      'down':  { key: 'ArrowDown',  mode: 'just' },
-      'left':  { key: 'ArrowLeft',  mode: 'hold' },
-      'right': { key: 'ArrowRight', mode: 'hold' },
-      'light': { key: 'j', mode: 'just' },
-      'heavy': { key: 'k', mode: 'just' },
-      'special': { key: 'l', mode: 'just' },
-      'block': { key: 'Shift', mode: 'hold' },
-    };
-
     const handleStart = (action) => {
-      const m = keyMap[action];
-      if (!m) return;
-      if (m.mode === 'just') {
-        this.keyJustPressed[m.key] = true;
-        this.keys[m.key] = true;
-        this.addToBuffer(m.key, 'press');
+      const bindings = this.storage.getSettings().keyBindings;
+      const map = {
+        'up':      bindings.Jump,
+        'down':    bindings.Dodge,
+        'left':    bindings.MoveLeft,
+        'right':   bindings.MoveRight,
+        'light':   bindings.AttackLight,
+        'heavy':   bindings.AttackHeavy,
+        'special': bindings.Special,
+        'block':   bindings.Block,
+      };
+
+      const key = map[action];
+      if (!key) return;
+
+      const isJustPress = action === 'light' || action === 'heavy' || action === 'special' || action === 'up' || action === 'down';
+      if (isJustPress) {
+        this['key' + 'Just' + 'Pressed'][key] = true;
+        this.keys[key] = true;
+        this.addToBuffer(key, 'press');
       } else {
-        this.keys[m.key] = true;
+        this.keys[key] = true;
       }
     };
 
     const handleEnd = (action) => {
-      const m = keyMap[action];
-      if (!m) return;
-      this.keys[m.key] = false;
+      const bindings = this.storage.getSettings().keyBindings;
+      const map = {
+        'up':      bindings.Jump,
+        'down':    bindings.Dodge,
+        'left':    bindings.MoveLeft,
+        'right':   bindings.MoveRight,
+        'light':   bindings.AttackLight,
+        'heavy':   bindings.AttackHeavy,
+        'special': bindings.Special,
+        'block':   bindings.Block,
+      };
+
+      const key = map[action];
+      if (key) {
+        this.keys[key] = false;
+      }
     };
 
     const buttons = touchControls.querySelectorAll('[data-touch]');

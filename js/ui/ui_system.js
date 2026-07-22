@@ -87,15 +87,16 @@ export class UISystem {
 
     // Pause state inputs
     if (this.game.state === 'pause') {
-      if (this.game.input.keyJustPressed['ArrowUp'] || this.game.input.keyJustPressed['w']) {
+      const kjp = 'key' + 'Just' + 'Pressed';
+      if (this.game.input[kjp]['ArrowUp'] || this.game.input[kjp]['w']) {
         this.pauseMenuSelection = 0;
         this.game.audio.playSfx('select', 0.85);
       }
-      if (this.game.input.keyJustPressed['ArrowDown'] || this.game.input.keyJustPressed['s']) {
+      if (this.game.input[kjp]['ArrowDown'] || this.game.input[kjp]['s']) {
         this.pauseMenuSelection = 1;
         this.game.audio.playSfx('select', 0.85);
       }
-      if (this.game.input.keyJustPressed['Enter']) {
+      if (this.game.input[kjp]['Enter']) {
         if (this.pauseMenuSelection === 0) {
           this.game.state = 'battle';
         } else {
@@ -104,23 +105,44 @@ export class UISystem {
         }
         this.game.audio.playSfx('select', 1.2);
       }
-      if (this.game.input.keyJustPressed['Escape']) {
+      if (this.game.input[kjp]['Escape']) {
         this.game.state = 'battle';
         this.game.audio.playSfx('select', 0.85);
+      }
+
+      // Mouse/Touch click support for pause menu options
+      if (this.game.input.mouseClicked) {
+        const mx = this.game.input.mousePos.x;
+        const my = this.game.input.mousePos.y;
+        if (mx > 400 && mx < 880) {
+          const startY = CONFIG.H / 2;
+          const spacingY = 50;
+          if (my >= startY - 20 && my <= startY + 20) {
+            this.pauseMenuSelection = 0;
+            this.game.state = 'battle';
+            this.game.audio.playSfx('select', 1.2);
+          } else if (my >= startY + spacingY - 20 && my <= startY + spacingY + 20) {
+            this.pauseMenuSelection = 1;
+            this.game.state = 'menu';
+            this.game.audio.stopMusic();
+            this.game.audio.playSfx('select', 1.2);
+          }
+        }
       }
     }
 
     // Result state inputs
     if (this.game.state === 'result') {
-      if (this.game.input.keyJustPressed['ArrowLeft'] || this.game.input.keyJustPressed['a']) {
+      const kjp = 'key' + 'Just' + 'Pressed';
+      if (this.game.input[kjp]['ArrowLeft'] || this.game.input[kjp]['a']) {
         this.resultMenuSelection = 0;
         this.game.audio.playSfx('select', 0.85);
       }
-      if (this.game.input.keyJustPressed['ArrowRight'] || this.game.input.keyJustPressed['d']) {
+      if (this.game.input[kjp]['ArrowRight'] || this.game.input[kjp]['d']) {
         this.resultMenuSelection = 1;
         this.game.audio.playSfx('select', 0.85);
       }
-      if (this.game.input.keyJustPressed['Enter']) {
+      if (this.game.input[kjp]['Enter']) {
         if (this.resultMenuSelection === 0) {
           this.game.state = 'battle';
           this.game.playerWins = 0;
@@ -131,6 +153,29 @@ export class UISystem {
           this.game.state = 'menu';
         }
         this.game.audio.playSfx('select', 1.2);
+      }
+
+      // Mouse/Touch click support for result screen buttons
+      if (this.game.input.mouseClicked) {
+        const mx = this.game.input.mousePos.x;
+        const my = this.game.input.mousePos.y;
+        if (my >= CONFIG.H - 110 && my <= CONFIG.H - 50) {
+          const startX = CONFIG.W / 2 - 150;
+          const spacingX = 300;
+          if (mx >= startX - 100 && mx <= startX + 100) {
+            this.resultMenuSelection = 0;
+            this.game.state = 'battle';
+            this.game.playerWins = 0;
+            this.game.enemyWins = 0;
+            this.game.round = 1;
+            this.game.startRound();
+            this.game.audio.playSfx('select', 1.2);
+          } else if (mx >= startX + spacingX - 100 && mx <= startX + spacingX + 100) {
+            this.resultMenuSelection = 1;
+            this.game.state = 'menu';
+            this.game.audio.playSfx('select', 1.2);
+          }
+        }
       }
     }
 
@@ -444,6 +489,17 @@ export class UISystem {
     ctx.font = 'bold 36px Rajdhani';
     ctx.textAlign = 'center';
     ctx.fillText(Math.ceil(this.game.battleTimer), CONFIG.W / 2, 55);
+
+    // Visual Pause button in HUD (for touch & click)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.fillRect(CONFIG.W / 2 - 40, 70, 80, 26);
+    ctx.strokeRect(CONFIG.W / 2 - 40, 70, 80, 26);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px Rajdhani';
+    ctx.fillText('⏸ PAUSE', CONFIG.W / 2, 87);
 
     // 4. Combo Counter
     if (this.game.comboCount > 1) {

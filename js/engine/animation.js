@@ -53,6 +53,9 @@ export class AnimationEngine {
         pose.limbs.headAngle = Math.sin(f) * 0.02;
         pose.limbs.leftArm = Math.sin(f) * 0.05;
         pose.limbs.rightArm = -Math.sin(f) * 0.05;
+        // Natural standing leg offsets (prevents overlapping leg bug)
+        pose.limbs.leftLeg = 0.18;
+        pose.limbs.rightLeg = -0.06;
         // Weapon sway
         pose.limbs.weaponAngle = Math.sin(f * 0.8) * 0.04;
         break;
@@ -114,10 +117,14 @@ export class AnimationEngine {
             pose.limbs.weaponAngle = anticipation * -Math.PI * 0.15; // pull weapon back
             pose.limbs.rightArm = anticipation * -0.3;
             pose.bodyY = anticipation * 5; // squat slightly
+            pose.limbs.leftLeg = anticipation * 0.25;
+            pose.limbs.rightLeg = anticipation * -0.15;
         } else {
             // Strike phase
             pose.limbs.weaponAngle = eased * Math.PI * 0.8;
             pose.rotation = eased * 0.25 * (entity.facing || 1); // lean into strike
+            pose.limbs.leftLeg = 0.38 * (1 - eased);
+            pose.limbs.rightLeg = -0.45 * eased;
             
             if (attackType === 'heavy') {
               pose.scaleX = 1.15;
@@ -163,6 +170,9 @@ export class AnimationEngine {
         pose.scaleY = 0.9;
         pose.limbs.leftArm = 0.6; // Raise shield/guard
         pose.limbs.rightArm = 0.2;
+        // Defensive crouch leg stance
+        pose.limbs.leftLeg = 0.35;
+        pose.limbs.rightLeg = -0.22;
         break;
       }
 
