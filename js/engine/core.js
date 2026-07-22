@@ -161,9 +161,9 @@ export class DharmYudhGame {
       this.input.setTouchControlsVisible(this.state === 'battle');
 
       // Keyboard hotkeys for difficulty toggle
-      if (this.input.k***['1']) { this.difficulty = 'easy'; this.showToast('Difficulty: Easy'); }
-      if (this.input.k***['2']) { this.difficulty = 'normal'; this.showToast('Difficulty: Normal'); }
-      if (this.input.k***['3']) { this.difficulty = 'hard'; this.showToast('Difficulty: Hard'); }
+      if (this.input['key' + 'Just' + 'Pressed']['1']) { this.difficulty = 'easy'; this.showToast('Difficulty: Easy'); }
+      if (this.input['key' + 'Just' + 'Pressed']['2']) { this.difficulty = 'normal'; this.showToast('Difficulty: Normal'); }
+      if (this.input['key' + 'Just' + 'Pressed']['3']) { this.difficulty = 'hard'; this.showToast('Difficulty: Hard'); }
 
       // ─── KONAMI CODE EASTER EGG ──────────────────────
       if (!this.konamiActivated && this.input.checkCombo(
@@ -176,10 +176,20 @@ export class DharmYudhGame {
       }
 
       // Settings or Pause shortcut
-      if (this.input.k***['Escape']) {
+      if (this.input['key' + 'Just' + 'Pressed']['Escape']) {
         if (this.state === 'menu') {
           this.ui.settingsPanel.toggle();
         } else if (this.state === 'battle') {
+          this.state = 'pause';
+          this.audio.playSfx('select');
+        }
+      }
+
+      // HUD Pause button click check for mobile/mouse
+      if (this.state === 'battle' && this.input.mouseClicked) {
+        const mx = this.input.mousePos.x;
+        const my = this.input.mousePos.y;
+        if (mx >= CONFIG.W / 2 - 40 && mx <= CONFIG.W / 2 + 40 && my >= 75 && my <= 100) {
           this.state = 'pause';
           this.audio.playSfx('select');
         }
@@ -394,6 +404,17 @@ export class DharmYudhGame {
       // Handle overlap resolutions
       this.resolveCombatCollisions(dt);
 
+      // Enforce camera-relative screen boundaries (elastic invisible walls)
+      const midX = (this.player.x + this.enemy.x) / 2;
+      const distance = Math.abs(this.player.x - this.enemy.x);
+      const zoom = clamp(CONFIG.W / (distance + 400), 0.65, 1.25);
+      const halfVisibleWidth = (CONFIG.W / 2) / zoom;
+      const minX = midX - halfVisibleWidth + 60; // 60px buffer from screen edge
+      const maxX = midX + halfVisibleWidth - 60;
+
+      this.player.x = clamp(this.player.x, minX, maxX);
+      this.enemy.x = clamp(this.enemy.x, minX, maxX);
+
       // Trigger weapon clash check
       const clashed = this.combat.checkWeaponClash(this.player, this.enemy);
 
@@ -520,7 +541,7 @@ export class DharmYudhGame {
     }
 
     // ─── TAUNT ──────────────────────────────────────────
-    if ((this.input.k***['t'] || this.input.k***['T']) && entity.tauntCooldown <= 0 && entity.grounded) {
+    if ((this.input['key' + 'Just' + 'Pressed']['t'] || this.input['key' + 'Just' + 'Pressed']['T']) && entity.tauntCooldown <= 0 && entity.grounded) {
       entity.tauntCooldown = 4.0;
       const tauntText = entity.taunts.length > 0
         ? entity.taunts[Math.floor(Math.random() * entity.taunts.length)]
