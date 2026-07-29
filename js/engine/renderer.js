@@ -60,23 +60,31 @@ export class RendererSystem {
     this.initQualitySettings();
 
       // Camera targets mid-point between fighters, unless one is dead
-      if (player.died || enemy.died) {
-        const deadChar = player.died ? player : enemy;
-        this.targetCameraX = -deadChar.x + this.width / 2;
-        this.targetCameraY = -deadChar.y + this.height * 0.65;
-        this.targetZoom = 1.35; // Zoom in close on KO
+      if (player && enemy) {
+        if (player.died || enemy.died) {
+          const deadChar = player.died ? player : enemy;
+          this.targetCameraX = -deadChar.x + this.width / 2;
+          this.targetCameraY = -deadChar.y + this.height * 0.65;
+          this.targetZoom = 1.35; // Zoom in close on KO
+        } else {
+          const midX = (player.x + enemy.x) / 2;
+          const midY = (player.y + enemy.y) / 2;
+
+          this.targetCameraX = -midX + this.width / 2;
+          this.targetCameraY = -midY + this.height * 0.7;
+
+          // Zoom dynamically based on distance
+          const distance = Math.abs(player.x - enemy.x);
+          const zoomRatio = clamp(this.width / (distance + 400), 0.75, 1.15);
+          this.targetZoom = zoomRatio;
+        }
       } else {
-        const midX = (player.x + enemy.x) / 2;
-        const midY = (player.y + enemy.y) / 2;
-
-        this.targetCameraX = -midX + this.width / 2;
-        this.targetCameraY = -midY + this.height * 0.7;
-
-        // Zoom dynamically based on distance
-        const distance = Math.abs(player.x - enemy.x);
-        const zoomRatio = clamp(this.width / (distance + 400), 0.75, 1.15);
-        this.targetZoom = zoomRatio;
+        // Fallback for menu states
+        this.targetCameraX = 0;
+        this.targetCameraY = 0;
+        this.targetZoom = 1.0;
       }
+
 
 
     // Camera interpolation (lerp)
