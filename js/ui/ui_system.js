@@ -387,7 +387,64 @@ export class UISystem {
         ctx.fillText(chData.passive.desc, cx, 548);
       }
 
-      // Render Stats bars
+      // Render 5-Point Stat Radar Chart (Right Side)
+      const rx = cx + 280;
+      const ry = 360;
+      const rMax = 75;
+      const statsList = [
+        { label: 'HP', val: chData.stats.hp / 200 },
+        { label: 'ATK', val: chData.stats.attack / 25 },
+        { label: 'DEF', val: chData.stats.defense / 18 },
+        { label: 'SPD', val: chData.stats.speed / 240 },
+        { label: 'SPC', val: chData.stats.specialDmg / 55 }
+      ];
+
+      // Web rings
+      ctx.strokeStyle = 'rgba(255, 215, 0, 0.25)';
+      ctx.lineWidth = 1;
+      for (let level = 1; level <= 3; level++) {
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+          const rad = (rMax * level) / 3;
+          const px = rx + Math.cos(angle) * rad;
+          const py = ry + Math.sin(angle) * rad;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // Filled Stat Polygon
+      ctx.fillStyle = `${chData.color}55`;
+      ctx.strokeStyle = chData.color;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      statsList.forEach((s, i) => {
+        const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        const rad = rMax * clamp(s.val, 0.25, 1.0);
+        const px = rx + Math.cos(angle) * rad;
+        const py = ry + Math.sin(angle) * rad;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Vertex Labels
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px Rajdhani';
+      ctx.textAlign = 'center';
+      statsList.forEach((s, i) => {
+        const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        const lx = rx + Math.cos(angle) * (rMax + 18);
+        const ly = ry + Math.sin(angle) * (rMax + 18);
+        ctx.fillText(s.label, lx, ly + 4);
+      });
+
+      // Render Stats bars (Left Side)
       const st = chData.passive ? 558 : 535;
       const sw = 250;
       const sh = 10;
@@ -419,6 +476,7 @@ export class UISystem {
         ctx.fillRect(cx - sw / 2, yy, fillWidth, sh);
       });
     }
+
 
     // Navigation indicators
     ctx.textAlign = 'center';

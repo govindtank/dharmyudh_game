@@ -194,6 +194,32 @@ export class AudioEngine {
         });
         break;
 
+      case 'shankh':
+        // Authentic Shankhnaad (Resonant Conch Shell Call)
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220 * pitch, now);
+        osc.frequency.linearRampToValueAtTime(440 * pitch, now + 0.3);
+        osc.frequency.linearRampToValueAtTime(330 * pitch, now + 1.2);
+        gain.gain.setValueAtTime(0.01, now);
+        gain.gain.linearRampToValueAtTime(bv * 1.5, now + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
+        osc.start(now);
+        osc.stop(now + 1.3);
+        break;
+
+      case 'nagada':
+        // Deep thundering battle drum pulse
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(90 * pitch, now);
+        osc.frequency.exponentialRampToValueAtTime(25 * pitch, now + 0.25);
+        gain.gain.setValueAtTime(bv * 1.8, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        osc.start(now);
+        osc.stop(now + 0.28);
+        this._noise(now, 0.15, bv * 1.2, panX);
+        break;
+
+
       case 'combo':
         osc.type = 'square';
         osc.frequency.setValueAtTime(400 * pitch, now);

@@ -64,8 +64,9 @@ export class CombatUpgradeSystem {
     this.astraCaster = caster;
     this.astraCutsceneProgress = 0;
 
-    // Dim background & trigger slow motion
+    // Dim background & trigger slow motion & Shankhnaad
     this.game.audio.playSfx('special', 0.5, 2.0);
+    this.game.audio.playSfx('shankh', 1.0);
     this.game.renderer.triggerShake(20);
     
     // Spawn spectacular particle spirals around the caster
@@ -82,6 +83,58 @@ export class CombatUpgradeSystem {
 
     this.game.ui.showToast(`${caster.name.toUpperCase()} SUMMONS THE ASTRA!`);
   }
+
+  // Draw Cinematic Astra Cut-In Banner with Radial Speed Lines
+  drawAstraCutscene(ctx) {
+    if (!this.astraActive || !this.astraCaster) return;
+
+    ctx.save();
+    const progress = this.astraCutsceneProgress;
+    const name = this.astraCaster.name.toUpperCase();
+    const weapon = (this.astraCaster.weapon || 'DIVINE ASTRA').toUpperCase();
+    const color = this.karma >= 0 ? '#ffd700' : '#ff1744';
+
+    // 1. Dark Vignette & Radial Speed Lines
+    ctx.fillStyle = 'rgba(10, 10, 15, 0.75)';
+    ctx.fillRect(0, 0, CONFIG.W, CONFIG.H);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.35;
+    for (let i = 0; i < 24; i++) {
+      const angle = (i / 24) * Math.PI * 2 + progress * 2;
+      ctx.beginPath();
+      ctx.moveTo(CONFIG.W / 2, CONFIG.H / 2);
+      ctx.lineTo(CONFIG.W / 2 + Math.cos(angle) * CONFIG.W, CONFIG.H / 2 + Math.sin(angle) * CONFIG.H);
+      ctx.stroke();
+    }
+
+    // 2. Center Banner Bar
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, CONFIG.H / 2 - 60, CONFIG.W, 120);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(0, CONFIG.H / 2 - 60, CONFIG.W, 120);
+
+    // 3. Dynamic Cut-In Text
+    ctx.fillStyle = color;
+    ctx.font = '900 42px Orbitron';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 20;
+
+    ctx.fillText(`${name} — ${weapon}`, CONFIG.W / 2, CONFIG.H / 2 - 10);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 20px Rajdhani';
+    ctx.fillText('DIVINE ASTRA ACTIVATED!', CONFIG.W / 2, CONFIG.H / 2 + 30);
+
+    ctx.restore();
+  }
+
 
   executeAstraAttack() {
     this.astraActive = false;

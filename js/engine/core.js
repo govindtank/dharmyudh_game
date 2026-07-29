@@ -924,7 +924,11 @@ export class DharmYudhGame {
       if (!this.story.inDialogue) {
         this.combat.drawKarmaHUD(this.renderer.ctx);
       }
+
+      // Draw Cinematic Super Astra Cut-In Banner
+      this.combat.drawAstraCutscene(this.renderer.ctx);
     }
+
 
     // Draw Story dialogues box if active
     if (this.state === 'battle' && this.story.inDialogue) {

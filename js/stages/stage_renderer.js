@@ -201,10 +201,34 @@ export class StageRenderer {
       }
     });
 
-    // Layer 3: Main Ground Floor
+    // Layer 3: Main Ground Floor & Volumetric Sunbeams
     this.layers.push({
       parallaxFactor: 1.0,
       draw: (ctx) => {
+        // Volumetric Sunbeams / Divine Light Rays
+        ctx.save();
+        const beamGrad = ctx.createLinearGradient(0, 0, 0, CONFIG.GROUND_Y);
+        beamGrad.addColorStop(0, 'rgba(255, 235, 59, 0.15)');
+        beamGrad.addColorStop(1, 'rgba(255, 235, 59, 0)');
+        ctx.fillStyle = beamGrad;
+
+        ctx.beginPath();
+        ctx.moveTo(-200, 0);
+        ctx.lineTo(-50, CONFIG.GROUND_Y);
+        ctx.lineTo(250, CONFIG.GROUND_Y);
+        ctx.lineTo(100, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(500, 0);
+        ctx.lineTo(650, CONFIG.GROUND_Y);
+        ctx.lineTo(950, CONFIG.GROUND_Y);
+        ctx.lineTo(800, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
         const grad = ctx.createLinearGradient(0, CONFIG.GROUND_Y, 0, CONFIG.H);
         grad.addColorStop(0, '#1c140d'); // Dark Kurukshetra soil
         grad.addColorStop(1, '#050302');
@@ -212,7 +236,7 @@ export class StageRenderer {
         ctx.fillRect(-CONFIG.W, CONFIG.GROUND_Y, CONFIG.W * 3, CONFIG.H - CONFIG.GROUND_Y);
 
         // Ground cracks detail
-        ctx.strokeStyle = 'rgba(255, 143, 0, 0.08)';
+        ctx.strokeStyle = 'rgba(255, 143, 0, 0.15)';
         ctx.lineWidth = 3;
         ctx.beginPath();
         for (let x = -600; x < CONFIG.W * 1.5; x += 150) {
@@ -221,9 +245,15 @@ export class StageRenderer {
           ctx.lineTo(x + 30, CONFIG.GROUND_Y + 120);
         }
         ctx.stroke();
+
+        // Stage Corner Pillars (Destructible / Crumbled)
+        ctx.fillStyle = '#3c2a21';
+        ctx.fillRect(-CONFIG.W + 80, CONFIG.GROUND_Y - 200, 40, 200);
+        ctx.fillRect(CONFIG.W * 2 - 120, CONFIG.GROUND_Y - 200, 40, 200);
       }
     });
   }
+
 
   initIndraprastha() {
     this.weather.type = 'clear';
