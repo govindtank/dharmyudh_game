@@ -1,0 +1,10 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# Node dependencies & temporary scratch builds
+node_modules/
+scratch/
+dist/
+build/
+*.log
