@@ -11,11 +11,12 @@ export class ScreenEffectsSystem {
 
   // Freeze time temporarily on hit to sell kinetic impact ("hit stop")
   triggerHitStop(type = 'light') {
-    let duration = 0.06;
-    if (type === 'heavy') duration = 0.12;
-    if (type === 'special') duration = 0.18;
+    let duration = 0.08;
+    if (type === 'heavy') duration = 0.14;
+    if (type === 'special') duration = 0.20;
     this.game.hitStopTimer = duration;
   }
+
 
   // Dynamic dramatic time slowdown
   triggerSlowMo(duration = 0.4) {
@@ -25,10 +26,13 @@ export class ScreenEffectsSystem {
   // KO dramatic screen flash
   triggerKoFlash() {
     this.game.koFlash = 1.0;
-    this.game.renderer.triggerShake(35);
-    this.triggerSlowMo(1.5);
-    this.game.koFreezeTimer = 0.5; // Freeze loop briefly
+    this.game.renderer.triggerShake(45);
+    this.triggerSlowMo(1.8);
+    this.game.koFreezeTimer = 1.2; // Freeze loop for dramatic impact
+    this.game.audio.playSfx('nagada', 0.8, 2.0);
+    this.game.audio.playSfx('nagada', 1.0, 2.0);
   }
+
 
   // Render high-action overlays on canvas (e.g. speed lines when special is charging)
   draw(ctx) {

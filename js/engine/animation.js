@@ -1,8 +1,5 @@
-// ============================================================
-// DHARMYUDH - Animation Engine
-// ============================================================
+import { easeOut, easeInOut, clamp } from './config.js';
 
-import { easeOut, easeInOut } from './config.js';
 
 export class AnimationEngine {
   constructor() {
@@ -71,9 +68,61 @@ export class AnimationEngine {
         pose.limbs.rightLeg = -Math.sin(f) * 0.45;
         pose.limbs.leftArm = -Math.sin(f) * 0.3;
         pose.limbs.rightArm = Math.sin(f) * 0.3;
-        pose.rotation = 0.05 * (entity.facing || 1); // lean forward
+        pose.rotation = 0.05; // lean forward (context flip handles direction)
         break;
       }
+
+      case 'run': {
+        const speed = entity.speed || 150;
+        const speedMultiplier = (speed / 150) * 1.45;
+        const f = time * 0.12 * speedMultiplier;
+        pose.bodyY = Math.abs(Math.sin(f)) * -3.0; // dynamic vertical bounce
+        pose.limbs.leftLeg = Math.sin(f) * 0.65;
+        pose.limbs.rightLeg = -Math.sin(f) * 0.65;
+        pose.limbs.leftArm = -Math.sin(f) * 0.5;
+        pose.limbs.rightArm = Math.sin(f) * 0.5;
+        pose.rotation = 0.12; // lean further forward
+        pose.scaleX = 1.05;
+        pose.scaleY = 0.95;
+        break;
+      }
+
+      case 'dash': {
+        pose.bodyY = 4; // crouch slightly
+        pose.limbs.leftLeg = 0.45;
+        pose.limbs.rightLeg = -0.3;
+        pose.limbs.leftArm = -0.5;
+        pose.limbs.rightArm = 0.8;
+        pose.rotation = 0.22; // lean heavily forward
+        pose.scaleX = 1.12;
+        pose.scaleY = 0.88; // horizontal stretch
+        break;
+      }
+
+      case 'landing': {
+        pose.bodyY = 8; // squash down
+        pose.limbs.leftLeg = 0.35;
+        pose.limbs.rightLeg = -0.35;
+        pose.limbs.leftArm = -0.2;
+        pose.limbs.rightArm = 0.2;
+        pose.scaleX = 1.15;
+        pose.scaleY = 0.85; // squashed body
+        break;
+      }
+
+      case 'dodge': {
+        const t = (entity.dodgeTimer || 0) / 0.15;
+        pose.bodyY = 15 * Math.sin(t * Math.PI); // hop arc
+        pose.rotation = -t * Math.PI * 2; // full roll rotation
+        pose.limbs.leftLeg = 0.4;
+        pose.limbs.rightLeg = 0.4;
+        pose.limbs.leftArm = 0.5;
+        pose.limbs.rightArm = 0.5;
+        pose.scaleX = 0.85;
+        pose.scaleY = 0.85; // compact roll
+        break;
+      }
+
 
       case 'jump': {
         // Arc-based pose
@@ -113,7 +162,7 @@ export class AnimationEngine {
         
         if (progress === 0) {
             // Wind up phase
-            pose.rotation = anticipation * -0.15 * (entity.facing || 1); // lean back
+            pose.rotation = anticipation * -0.15; // lean back
             pose.limbs.weaponAngle = anticipation * -Math.PI * 0.15; // pull weapon back
             pose.limbs.rightArm = anticipation * -0.3;
             pose.bodyY = anticipation * 5; // squat slightly
@@ -122,7 +171,8 @@ export class AnimationEngine {
         } else {
             // Strike phase
             pose.limbs.weaponAngle = eased * Math.PI * 0.8;
-            pose.rotation = eased * 0.25 * (entity.facing || 1); // lean into strike
+            pose.rotation = eased * 0.25; // lean into strike
+
             pose.limbs.leftLeg = 0.38 * (1 - eased);
             pose.limbs.rightLeg = -0.45 * eased;
             
@@ -145,12 +195,12 @@ export class AnimationEngine {
         const impact = 1 - this.easings.easeOut(progress);
         
         pose.bodyY = impact * 15; // pushed down slightly
-        pose.rotation = impact * -0.35 * (entity.facing || 1); // Bend backwards
+        pose.rotation = impact * -0.35; // Bend backwards
         pose.scaleX = 1 + (impact * 0.1); 
         pose.scaleY = 1 - (impact * 0.1); // squash
         pose.limbs.leftArm = impact * -0.7;
         pose.limbs.rightArm = impact * -0.5;
-        pose.limbs.headAngle = impact * -0.4 * (entity.facing || 1); // Head thrown back
+        pose.limbs.headAngle = impact * -0.4; // Head thrown back
         break;
       }
 
@@ -158,7 +208,8 @@ export class AnimationEngine {
         // Fixed: replaced undefined p with Math.PI
         const t = clamp(entity.stateTimer || 0, 0, 1);
         pose.bodyY = -t * 60;
-        pose.rotation = -t * 0.8 * Math.PI * (entity.facing || 1);
+        pose.rotation = -t * 0.8 * Math.PI;
+
         pose.alpha = 1 - t;
         pose.limbs.leftLeg = 0.2;
         pose.limbs.rightLeg = 0.2;

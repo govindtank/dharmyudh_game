@@ -234,7 +234,9 @@ export class UISystem {
         this.drawHUD(ctx);
         this.drawRoundIntro(ctx);
         this.drawToast(ctx);
+        this.drawKOOverlay(ctx);
         break;
+
       case 'result':
         this.drawResults(ctx);
         break;
@@ -514,8 +516,12 @@ export class UISystem {
     // HP Bar backing
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(pBX, pBY + 10, pBW, 18);
+    // Draw Ghost HP (red bar draining)
+    const pGhostRatio = clamp(this.game.player.ghostHp / this.game.player.hp, 0, 1);
+    ctx.fillStyle = '#b71c1c';
+    ctx.fillRect(pBX, pBY + 10, pBW * pGhostRatio, 18);
     // Fill HP Bar (Decelerating gradient color)
-    const pHP = this.game.player.currentHp / this.game.player.hp;
+    const pHP = clamp(this.game.player.currentHp / this.game.player.hp, 0, 1);
     const pHpColor = pHP > 0.5 ? '#4caf50' : pHP > 0.25 ? '#ff9800' : '#f44336';
     ctx.fillStyle = pHpColor;
     ctx.fillRect(pBX, pBY + 10, pBW * pHP, 18);
@@ -537,7 +543,12 @@ export class UISystem {
     // HP Bar backing
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(eBX, eBY + 10, eBW, 18);
-    const eHP = this.game.enemy.currentHp / this.game.enemy.hp;
+    // Draw Ghost HP (red bar draining)
+    const eGhostRatio = clamp(this.game.enemy.ghostHp / this.game.enemy.hp, 0, 1);
+    ctx.fillStyle = '#b71c1c';
+    ctx.fillRect(eBX + (eBW - eBW * eGhostRatio), eBY + 10, eBW * eGhostRatio, 18);
+    // Fill HP Bar
+    const eHP = clamp(this.game.enemy.currentHp / this.game.enemy.hp, 0, 1);
     const eHpColor = eHP > 0.5 ? '#4caf50' : eHP > 0.25 ? '#ff9800' : '#f44336';
     ctx.fillStyle = eHpColor;
     ctx.fillRect(eBX + (eBW - eBW * eHP), eBY + 10, eBW * eHP, 18);
@@ -561,10 +572,28 @@ export class UISystem {
 
     // 4. Combo Counter
     if (this.game.comboCount > 1) {
-      ctx.fillStyle = '#ff8f00';
-      ctx.font = 'bold 44px Rajdhani';
-      ctx.fillText(`${this.game.comboCount} HITS!`, CONFIG.W / 2, 130);
+      ctx.save();
+      const scale = 1.0 + clamp((this.game.comboTimer / CONFIG.COMBO_WINDOW), 0, 1) * 0.25;
+      ctx.translate(CONFIG.W / 2, 135);
+      ctx.scale(scale, scale);
+      
+      const comboGrad = ctx.createLinearGradient(-100, 0, 100, 0);
+      comboGrad.addColorStop(0, '#ff3d00');
+      comboGrad.addColorStop(0.5, '#ffd700');
+      comboGrad.addColorStop(1, '#ff3d00');
+      ctx.fillStyle = comboGrad;
+      
+      ctx.font = '900 46px Rajdhani, Orbitron';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      ctx.shadowColor = '#ff6d00';
+      ctx.shadowBlur = 15;
+      
+      ctx.fillText(`${this.game.comboCount} HITS!`, 0, 0);
+      ctx.restore();
     }
+
 
     ctx.restore();
   }
@@ -845,5 +874,47 @@ export class UISystem {
 
     ctx.restore();
   }
+
+  drawKOOverlay(ctx) {
+    if (this.game.koFreezeTimer <= 0 && !this.game.player.died && !this.game.enemy.died) return;
+
+    ctx.save();
+    
+    // Animate scale based on KO freeze timer
+    let progress = 1.0;
+    if (this.game.koFreezeTimer > 0) {
+      progress = 1.0 - (this.game.koFreezeTimer / 1.2); // goes from 0 to 1
+    }
+    
+    const scale = progress < 0.2 ? lerp(0.1, 1.2, progress / 0.2) : lerp(1.2, 1.0, (progress - 0.2) / 0.8);
+    
+    ctx.translate(CONFIG.W / 2, CONFIG.H / 2 - 40);
+    ctx.scale(scale, scale);
+
+    // KO Text Shadow Glow
+    ctx.shadowColor = '#d50000';
+    ctx.shadowBlur = 30;
+
+    // Draw KO Text
+    const koGrad = ctx.createLinearGradient(-150, 0, 150, 0);
+    koGrad.addColorStop(0, '#ff1744');
+    koGrad.addColorStop(0.5, '#ffffff');
+    koGrad.addColorStop(1, '#ff1744');
+    ctx.fillStyle = koGrad;
+
+    ctx.font = '900 110px Rajdhani, Orbitron';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('K.O.', 0, 0);
+
+    // Draw subtitle
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#dfa650';
+    ctx.font = 'bold 24px Rajdhani';
+    ctx.fillText('DHARMA IS DECIDED', 0, 75);
+
+    ctx.restore();
+  }
 }
 export default UISystem;
+

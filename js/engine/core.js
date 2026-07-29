@@ -409,13 +409,14 @@ export class DharmYudhGame {
       // Enforce camera-relative screen boundaries (elastic invisible walls)
       const midX = (this.player.x + this.enemy.x) / 2;
       const distance = Math.abs(this.player.x - this.enemy.x);
-      const zoom = clamp(CONFIG.W / (distance + 400), 0.65, 1.25);
+      const zoom = clamp(CONFIG.W / (distance + 400), 0.75, 1.15);
       const halfVisibleWidth = (CONFIG.W / 2) / zoom;
-      const minX = midX - halfVisibleWidth + 60; // 60px buffer from screen edge
-      const maxX = midX + halfVisibleWidth - 60;
+      const minX = midX - halfVisibleWidth + 40; // 40px buffer from screen edge
+      const maxX = midX + halfVisibleWidth - 40;
 
       this.player.x = clamp(this.player.x, minX, maxX);
       this.enemy.x = clamp(this.enemy.x, minX, maxX);
+
 
       // Trigger weapon clash check
       const clashed = this.combat.checkWeaponClash(this.player, this.enemy);
@@ -467,12 +468,12 @@ export class DharmYudhGame {
     }
 
     // Apply acceleration / friction towards targetVelocityX
-    if (entity.targetVelocityX !== undefined && !entity.attacking && entity.hitstun <= 0) {
+    if (entity.targetVelocityX !== undefined && !entity.attacking && entity.hitstun <= 0 && (!entity.dashTimer || entity.dashTimer <= 0)) {
       const accel = entity.grounded ? 12 : 5; // Slippier in air
       entity.velocityX += (entity.targetVelocityX - entity.velocityX) * accel * dt;
-    } else if (entity.hitstun <= 0 && !entity.attacking) {
+    } else if (entity.hitstun <= 0 && !entity.attacking && (!entity.dashTimer || entity.dashTimer <= 0)) {
       // Natural friction if targetVelocityX isn't set (safety fallback)
-      entity.velocityX *= Math.pow(0.85, dt * 60);
+      entity.velocityX *= Math.pow(0.90, dt * 60);
     }
 
     entity.x += entity.velocityX * dt;
@@ -483,44 +484,155 @@ export class DharmYudhGame {
       entity.velocityY = 0;
       if (!entity.grounded) {
         entity.grounded = true;
+        entity.landingTimer = 0.1; // 100ms landing squash state
+        entity.airDashUsed = false; // Reset air dash
         this.particles.spawn(entity.x, entity.y, { type: 'smoke', color: '#666', count: 4, size: 8 });
         this.audio.playSfx('land');
       }
     }
 
-    entity.x = clamp(entity.x, 40, CONFIG.W - 40);
+    const minBound = 60;
+    const maxBound = CONFIG.W - 60;
+    if (entity.x <= minBound || entity.x >= maxBound) {
+      if (entity.hitstun > 0 && Math.abs(entity.velocityX) > 150) {
+        entity.velocityX = -entity.velocityX * 0.45; // Bounce back
+        this.renderer.triggerShake(12);
+        this.particles.spawn(entity.x, entity.y - 60, { type: 'spark', color: '#ffb300', count: 12, speed: 200 });
+        this.audio.playSfx('heavy', 1.2);
+        this.particles.spawnFloatingText(entity.x, entity.y - 100, 'WALL BOUNCE!', '#ffd700');
+      }
+      entity.x = clamp(entity.x, minBound, maxBound);
+    }
   }
 
-  updatePlayerControls(entity, dt, opp) {
-    if (entity.attacking || entity.hitstun > 0 || entity.died) return;
 
-    // Movement
+
+  updatePlayerControls(entity, dt, opp) {
+    const playerNum = entity === this.player ? 1 : 2;
+
+    // Tick buffered input timer
+    if (entity.bufferedAttack) {
+      entity.bufferedAttack.timer -= dt;
+      if (entity.bufferedAttack.timer <= 0) {
+        entity.bufferedAttack = null;
+      }
+    }
+
+    // Execute buffered attack if character is now free
+    if (!entity.attacking && entity.hitstun <= 0 && !entity.died && entity.bufferedAttack) {
+      const type = entity.bufferedAttack.type;
+      entity.bufferedAttack = null;
+      if (type === 'light' && entity.attackCooldown <= 0) {
+        this.performAttack(entity, opp, 'light');
+      } else if (type === 'heavy' && entity.attackCooldown <= 0) {
+        this.performAttack(entity, opp, 'heavy');
+      } else if (type === 'special' && entity.specialCooldown <= 0 && entity.energy >= CONFIG.SPECIAL_COST) {
+        this.performSpecial(entity, opp);
+      }
+    }
+
+    if (entity.attacking || entity.hitstun > 0 || entity.died) {
+      // Buffer inputs if pressed during attack/stun
+      const bindings = this.storage.getSettings().keyBindings;
+      if (this.input.isActionJustPressed('AttackLight', playerNum)) {
+        entity.bufferedAttack = { type: 'light', timer: 0.25 };
+      } else if (this.input.isActionJustPressed('AttackHeavy', playerNum)) {
+        entity.bufferedAttack = { type: 'heavy', timer: 0.25 };
+      } else if (this.input.isActionJustPressed('Special', playerNum)) {
+        entity.bufferedAttack = { type: 'special', timer: 0.25 };
+      }
+      return;
+    }
+
+    // Double-tap dash detection
+    const now = performance.now();
+    let triggerDashDir = 0;
+
+    if (this.input.isActionJustPressed('MoveLeft', playerNum)) {
+      if (now - entity.lastDirectionTime < 250 && entity.lastDirectionKey === 'left') {
+        triggerDashDir = -1;
+      }
+      entity.lastDirectionKey = 'left';
+      entity.lastDirectionTime = now;
+    } else if (this.input.isActionJustPressed('MoveRight', playerNum)) {
+      if (now - entity.lastDirectionTime < 250 && entity.lastDirectionKey === 'right') {
+        triggerDashDir = 1;
+      }
+      entity.lastDirectionKey = 'right';
+      entity.lastDirectionTime = now;
+    }
+
+    // Execute Dash
+    if (triggerDashDir !== 0 && entity.dashCooldown <= 0) {
+      if (entity.grounded) {
+        entity.dashTimer = 0.12; // 120ms dash
+        entity.velocityX = triggerDashDir * 600;
+        entity.targetVelocityX = triggerDashDir * 600;
+        entity.invTimer = 0.12;
+        entity.dashCooldown = 0.4;
+        this.audio.playSfx('dodge');
+        this.particles.spawn(entity.x, entity.y - 40, { type: 'smoke', color: '#888', count: 6, size: 8, speed: 80 });
+      } else if (!entity.airDashUsed) {
+        entity.airDashUsed = true;
+        entity.dashTimer = 0.10;
+        entity.velocityX = triggerDashDir * 550;
+        entity.velocityY = -100; // brief float pop
+        entity.targetVelocityX = triggerDashDir * 550;
+        entity.invTimer = 0.10;
+        this.audio.playSfx('dodge');
+        this.particles.spawn(entity.x, entity.y - 40, { type: 'spark', color: '#00e5ff', count: 8, size: 4, speed: 120 });
+      }
+    }
+
+    // Movement speed with Run Modifier
     let speed = entity.speed;
-    entity.blocking = !!(this.input.isActionPressed('Block', 1) && entity.grounded);
-    if (entity.blocking) speed *= 0.5;
+    entity.blocking = !!(this.input.isActionPressed('Block', playerNum) && entity.grounded);
+    if (entity.blocking) {
+      speed *= 0.5;
+    }
+
+    const isMovingLeft = this.input.isActionPressed('MoveLeft', playerNum);
+    const isMovingRight = this.input.isActionPressed('MoveRight', playerNum);
+
+    if ((isMovingLeft || isMovingRight) && entity.grounded && entity.dashTimer <= 0) {
+      entity.runTimer += dt;
+      if (entity.runTimer > 0.3) {
+        entity.isRunning = true;
+        speed *= 1.45; // Run speed multiplier
+        // Footsteps running dust
+        if (Math.random() < 0.25) {
+          this.particles.spawn(entity.x - entity.facing * 12, CONFIG.GROUND_Y, { type: 'smoke', color: '#aaa', size: 6, speed: 45 });
+        }
+      }
+    } else {
+      entity.runTimer = 0;
+      entity.isRunning = false;
+    }
 
     let moveIntent = 0;
-    if (this.input.isActionPressed('MoveLeft', 1)) moveIntent = -1;
-    if (this.input.isActionPressed('MoveRight', 1)) moveIntent = 1;
+    if (isMovingLeft) moveIntent = -1;
+    if (isMovingRight) moveIntent = 1;
     
-    entity.targetVelocityX = moveIntent * speed;
+    // Set target horizontal velocity
+    if (entity.dashTimer <= 0) {
+      entity.targetVelocityX = moveIntent * speed;
+    }
 
-    // Footsteps smoke particles
-    if (moveIntent !== 0 && entity.grounded && Math.random() < 0.15) {
+    // Footsteps walk smoke particles
+    if (moveIntent !== 0 && entity.grounded && !entity.isRunning && Math.random() < 0.15) {
       this.particles.spawn(entity.x - entity.facing * 10, CONFIG.GROUND_Y, { type: 'smoke', color: '#888', size: 5, speed: 30 });
     }
 
     // Jump
-    if (this.input.isActionJustPressed('Jump', 1) && entity.grounded) {
-      entity.velocityY = -650;
+    if (this.input.isActionJustPressed('Jump', playerNum) && entity.grounded) {
+      entity.velocityY = -720; // Improved jump force
       entity.grounded = false;
       this.audio.playSfx('jump', rng(0.85, 1.15));
     }
 
-    // Dodge
-    if (this.input.isActionJustPressed('Dodge', 1) && entity.dodgeCooldown <= 0 && entity.grounded) {
+    // Dodge (Regular roll)
+    if (this.input.isActionJustPressed('Dodge', playerNum) && entity.dodgeCooldown <= 0 && entity.grounded) {
       entity.dodgeTimer = 0.15;
-      // Passive: Blade Dance reduces dodge cooldown by 20%
       let dodgeCD = 0.6;
       if (entity.getCooldownMultiplier) {
         dodgeCD *= entity.getCooldownMultiplier('dodge');
@@ -531,19 +643,19 @@ export class DharmYudhGame {
       this.audio.playSfx('dodge');
     }
 
-    // Attacks
-    if (this.input.isActionJustPressed('AttackLight', 1) && entity.attackCooldown <= 0) {
+    // Attacks (Direct triggers or buffering)
+    if (this.input.isActionJustPressed('AttackLight', playerNum) && entity.attackCooldown <= 0) {
       this.performAttack(entity, opp, 'light');
     }
-    else if (this.input.isActionJustPressed('AttackHeavy', 1) && entity.attackCooldown <= 0) {
+    else if (this.input.isActionJustPressed('AttackHeavy', playerNum) && entity.attackCooldown <= 0) {
       this.performAttack(entity, opp, 'heavy');
     }
-    else if (this.input.isActionJustPressed('Special', 1) && entity.specialCooldown <= 0 && entity.energy >= CONFIG.SPECIAL_COST) {
+    else if (this.input.isActionJustPressed('Special', playerNum) && entity.specialCooldown <= 0 && entity.energy >= CONFIG.SPECIAL_COST) {
       this.performSpecial(entity, opp);
     }
 
-    // ─── TAUNT ──────────────────────────────────────────
-    if ((this.input['key' + 'Just' + 'Pressed']['t'] || this.input['key' + 'Just' + 'Pressed']['T']) && entity.tauntCooldown <= 0 && entity.grounded) {
+    // ─── TAUNT ───
+    if (playerNum === 1 && (this.input.keyJustPressed['t'] || this.input.keyJustPressed['T']) && entity.tauntCooldown <= 0 && entity.grounded) {
       entity.tauntCooldown = 4.0;
       const tauntText = entity.taunts.length > 0
         ? entity.taunts[Math.floor(Math.random() * entity.taunts.length)]
@@ -553,40 +665,87 @@ export class DharmYudhGame {
     }
   }
 
+
   updateAIControls(entity, dt, opp) {
     if (entity.attacking || entity.hitstun > 0 || entity.died) return;
 
     entity.aiTimer -= dt;
     const distance = Math.abs(entity.x - opp.x);
 
-    // AI logic ticks every 200ms
+    // AI logic ticks every 120ms for faster reactions
     if (entity.aiTimer <= 0) {
-      entity.aiTimer = 0.2;
+      entity.aiTimer = 0.12;
 
-      // Basic behavior trees
-      if (distance > 160) {
-        entity.aiState = 'approach';
+      // Defensive reaction check
+      if (opp.attacking && distance < 140) {
+        const rand = Math.random();
+        if (rand < 0.30) {
+          entity.blocking = true;
+          entity.aiState = 'block';
+        } else if (rand < 0.45 && entity.dodgeCooldown <= 0 && entity.grounded) {
+          // Dodge / Roll away
+          entity.dodgeTimer = 0.15;
+          entity.dodgeCooldown = 0.6;
+          entity.invTimer = 0.2;
+          entity.velocityX = entity.facing * -450;
+          this.audio.playSfx('dodge');
+          entity.aiState = 'dodge';
+        } else {
+          entity.blocking = false;
+          entity.aiState = 'fight';
+        }
       } else {
-        entity.aiState = 'fight';
+        entity.blocking = false;
+        if (distance > 180) {
+          entity.aiState = 'approach';
+        } else if (opp.attacking && distance > 180 && distance < 320 && Math.random() < 0.4 && entity.dashCooldown <= 0) {
+          // Whiff Punish: Dash in when opponent is attacking from a distance
+          entity.dashTimer = 0.12;
+          entity.velocityX = entity.facing * 600;
+          entity.targetVelocityX = entity.facing * 600;
+          entity.invTimer = 0.12;
+          entity.dashCooldown = 0.4;
+          this.audio.playSfx('dodge');
+          entity.aiState = 'punish';
+        } else {
+          entity.aiState = 'fight';
+        }
       }
     }
 
+    // Execute state actions
     if (entity.aiState === 'approach') {
       const dir = opp.x > entity.x ? 1 : -1;
       entity.targetVelocityX = dir * entity.speed;
     } 
-    else if (entity.aiState === 'fight') {
-      entity.targetVelocityX = 0;
-      // Choose attack type randomly
-      if (Math.random() < 0.2 && entity.energy >= CONFIG.SPECIAL_COST && entity.specialCooldown <= 0) {
-        this.performSpecial(entity, opp);
-      } else if (Math.random() < 0.4 && entity.attackCooldown <= 0) {
-        this.performAttack(entity, opp, 'heavy');
-      } else if (entity.attackCooldown <= 0) {
-        this.performAttack(entity, opp, 'light');
+    else if (entity.aiState === 'punish') {
+      // Punish with immediate light or heavy attack
+      if (entity.attackCooldown <= 0) {
+        this.performAttack(entity, opp, Math.random() < 0.6 ? 'light' : 'heavy');
       }
     }
+    else if (entity.aiState === 'fight') {
+      entity.targetVelocityX = 0;
+      
+      // Execute attacks or chain combos
+      if (entity.attackCooldown <= 0) {
+        if (Math.random() < 0.2 && entity.energy >= CONFIG.SPECIAL_COST && entity.specialCooldown <= 0) {
+          this.performSpecial(entity, opp);
+        } else if (Math.random() < 0.35) {
+          this.performAttack(entity, opp, 'heavy');
+        } else {
+          this.performAttack(entity, opp, 'light');
+          // Buffer next hit of light combo chain
+          entity.bufferedAttack = { type: 'light', timer: 0.15 };
+        }
+      }
+    }
+    else if (entity.aiState === 'block') {
+      entity.targetVelocityX = 0;
+      entity.blocking = true;
+    }
   }
+
 
   performAttack(entity, opp, type) {
     entity.attacking = true;
@@ -644,7 +803,8 @@ export class DharmYudhGame {
       attacker.hasHit = true;
 
       // ─── HITSTOP (Micro-freeze on Impact) ───────────
-      this.hitstopTimer = attacker.attackType === 'heavy' ? 0.08 : (attacker.attackType === 'special' ? 0.12 : 0.05);
+      this.hitStopTimer = attacker.attackType === 'heavy' ? 0.14 : (attacker.attackType === 'special' ? 0.20 : 0.08);
+
 
       // Call onHitLanded for passive tracking before damage
       if (attacker.onHitLanded) {
@@ -664,19 +824,20 @@ export class DharmYudhGame {
 
       // Calculate base damage
       let damage = attacker.attack * counterMult;
-      let knockbackX = attacker.facing * 180;
+      let knockbackX = attacker.facing * 220;
       let knockbackY = 0;
 
       if (attacker.attackType === 'heavy') {
         damage *= 1.6;
-        knockbackX = attacker.facing * 300;
-        knockbackY = -280; // Launches opponent
+        knockbackX = attacker.facing * 380;
+        knockbackY = -340; // Launches opponent higher
       } 
       else if (attacker.attackType === 'special') {
         damage = attacker.specialDmg;
-        knockbackX = attacker.facing * 450;
-        knockbackY = -350; // Launch skyward
+        knockbackX = attacker.facing * 550;
+        knockbackY = -420; // Launch skyward significantly
       }
+
 
       // ─── PASSIVE: Apply damage bonuses ────────────────
       if (attacker.getDamageBonus) {
