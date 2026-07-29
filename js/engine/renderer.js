@@ -59,25 +59,31 @@ export class RendererSystem {
   update(dt, player, enemy) {
     this.initQualitySettings();
 
-    // Camera targets mid-point between fighters
-    if (player && enemy) {
-      const midX = (player.x + enemy.x) / 2;
-      const midY = (player.y + enemy.y) / 2;
+      // Camera targets mid-point between fighters, unless one is dead
+      if (player.died || enemy.died) {
+        const deadChar = player.died ? player : enemy;
+        this.targetCameraX = -deadChar.x + this.width / 2;
+        this.targetCameraY = -deadChar.y + this.height * 0.65;
+        this.targetZoom = 1.35; // Zoom in close on KO
+      } else {
+        const midX = (player.x + enemy.x) / 2;
+        const midY = (player.y + enemy.y) / 2;
 
-      // Track relative to screen center
-      this.targetCameraX = -midX + this.width / 2;
-      this.targetCameraY = -midY + this.height * 0.7; // shift slightly up to see ground clearly
+        this.targetCameraX = -midX + this.width / 2;
+        this.targetCameraY = -midY + this.height * 0.7;
 
-      // Zoom dynamically based on distance
-      const distance = Math.abs(player.x - enemy.x);
-      const zoomRatio = clamp(this.width / (distance + 400), 0.65, 1.25);
-      this.targetZoom = zoomRatio;
-    }
+        // Zoom dynamically based on distance
+        const distance = Math.abs(player.x - enemy.x);
+        const zoomRatio = clamp(this.width / (distance + 400), 0.75, 1.15);
+        this.targetZoom = zoomRatio;
+      }
+
 
     // Camera interpolation (lerp)
-    this.cameraX += (this.targetCameraX - this.cameraX) * 0.08;
-    this.cameraY += (this.targetCameraY - this.cameraY) * 0.08;
-    this.cameraZoom += (this.targetZoom - this.cameraZoom) * 0.08;
+    this.cameraX += (this.targetCameraX - this.cameraX) * 0.15;
+    this.cameraY += (this.targetCameraY - this.cameraY) * 0.15;
+    this.cameraZoom += (this.targetZoom - this.cameraZoom) * 0.12;
+
 
     // Decay shake intensity
     if (this.shakeIntensity > 0.1) {

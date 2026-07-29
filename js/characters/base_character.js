@@ -23,6 +23,8 @@ export class BaseCharacter {
     this.defense = charData.stats.defense;
     this.specialDmg = charData.stats.specialDmg;
     this.currentHp = this.hp;
+    this.ghostHp = this.hp;
+
 
     // Kinematics / Physics
     const baseX = isPlayer ? 220 : CONFIG.W - 220;
@@ -60,12 +62,23 @@ export class BaseCharacter {
     this.invincible = false;
     this.blocking = false;
     
+    // Dash & Run properties
+    this.dashTimer = 0;
+    this.dashCooldown = 0;
+    this.airDashUsed = false;
+    this.landingTimer = 0;
+    this.runTimer = 0;
+    this.isRunning = false;
+    this.lastDirectionKey = null;
+    this.lastDirectionTime = 0;
+    
     this.tauntCooldown = 0;
     
     this.hitstun = 0;
     this.hitFlash = 0;
     this.died = false;
     this.weaponTrail = []; // Array of previous weapon tip points for motion trails
+
 
 
     // AI Variables
@@ -147,6 +160,15 @@ export class BaseCharacter {
     this.hitstun = Math.max(0, this.hitstun - dt);
     this.tauntCooldown = Math.max(0, this.tauntCooldown - dt);
     
+    this.dashTimer = Math.max(0, this.dashTimer - dt);
+    this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    this.landingTimer = Math.max(0, this.landingTimer - dt);
+    this.dodgeTimer = Math.max(0, this.dodgeTimer - dt);
+
+    // Slowly drain ghost health bar behind actual health
+    this.ghostHp += (this.currentHp - this.ghostHp) * 2.5 * dt;
+
+
     this.hitFlash = Math.max(0, this.hitFlash - dt * 5);
     this.energy = Math.min(this.maxEnergy, this.energy + CONFIG.ENERGY_REGEN * dt);
 
@@ -156,7 +178,7 @@ export class BaseCharacter {
     if (this.hitstun > 0) {
       this.state = 'hitstun';
       // Apply decelerating knockback (only modify velocity here, position updated in core physics)
-      this.velocityX *= Math.pow(0.85, dt * 60);
+      this.velocityX *= Math.pow(0.92, dt * 60); // slightly smoother knockback glide
       return;
     }
 
@@ -166,7 +188,7 @@ export class BaseCharacter {
     }
 
     // Facing direction (auto-face opponent)
-    if (!this.attacking) {
+    if (!this.attacking && this.dashTimer <= 0) {
       this.facing = opp.x > this.x ? 1 : -1;
     }
 
@@ -185,11 +207,21 @@ export class BaseCharacter {
         this.specialActive = false;
         this.hasHit = false;
       }
-    } else if (Math.abs(this.x - this.lastX) > 2) {
+    } else if (this.dodgeTimer > 0) {
+      this.state = 'dodge';
+    } else if (this.dashTimer > 0) {
+      this.state = 'dash';
+    } else if (this.landingTimer > 0) {
+      this.state = 'landing';
+    } else if (this.isRunning && Math.abs(this.x - this.lastX) > 1.5) {
+      this.state = 'run';
+    } else if (Math.abs(this.x - this.lastX) > 1.5) {
       this.state = 'walk';
     } else {
       this.state = 'idle';
     }
+
+
 
     this.lastX = this.x;
   }

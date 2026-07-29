@@ -34,12 +34,7 @@ export class CharacterRenderer {
 
     if (!ctx) return;
 
-    ctx.save();
-    
-    // Global transparency
-    ctx.globalAlpha = pose.alpha;
-
-    // Dynamic drop shadow (scales based on jump height)
+    // 1. Draw Drop Shadow
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
     const shadowScale = clamp(1 - (CONFIG.GROUND_Y - entity.y) * 0.005, 0.2, 1);
@@ -47,12 +42,6 @@ export class CharacterRenderer {
     ctx.ellipse(entity.x, CONFIG.GROUND_Y, 38 * shadowScale, 9 * shadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-    
-    // Position character center pivot
-    ctx.translate(entity.x, entity.y);
-    ctx.scale(entity.facing * pose.scaleX, pose.scaleY);
-
-    let isFlashing = entity.hitFlash > 0;
 
     // Retrieve warrior colors
     const colors = entity.colors || {
@@ -62,38 +51,71 @@ export class CharacterRenderer {
       gold: '#ffd700', goldShadow: '#c8a000'
     };
 
+    let isFlashing = entity.hitFlash > 0;
+
+    // 2. Draw Dash Ghost Afterimages in World Space
+    if (entity.state === 'dash') {
+      for (let i = 1; i <= 2; i++) {
+        ctx.save();
+        ctx.globalAlpha = 0.35 / i;
+        // Offset ghosts behind movement direction
+        const offsetX = -entity.velocityX * 0.015 * i;
+        ctx.translate(entity.x + offsetX, entity.y);
+        ctx.scale(entity.facing * pose.scaleX, pose.scaleY);
+        if (pose.rotation) {
+          ctx.rotate(pose.rotation);
+        }
+        this.drawBodySegments(ctx, pose, colors, isFlashing, entity);
+        ctx.restore();
+      }
+    }
+
+    // 3. Draw Primary Character Body
+    ctx.save();
+    ctx.globalAlpha = pose.alpha;
+    ctx.translate(entity.x, entity.y);
+    ctx.scale(entity.facing * pose.scaleX, pose.scaleY);
+    if (pose.rotation) {
+      ctx.rotate(pose.rotation);
+    }
+
     // Render Divine Astra Aura when 100% Karma / Energy Ready
     if (entity.energy >= CONFIG.SPECIAL_COST || entity.specialActive) {
       this.drawDivineAura(ctx, entity);
     }
 
-    // Joint anchors relative to character center (150px realistic height)
+    this.drawBodySegments(ctx, pose, colors, isFlashing, entity);
+    ctx.restore();
+  }
+
+  /**
+   * Helper to render character body joints in Z-order
+   */
+  drawBodySegments(ctx, pose, colors, isFlashing, entity) {
     const headX = 0, headY = -135 + pose.bodyY;
     const neckX = 0, neckY = -120 + pose.bodyY;
     const hipsX = 0, hipsY = -70 + pose.bodyY;
     const shoulderLX = -24, shoulderLY = -110 + pose.bodyY;
     const shoulderRX = 24, shoulderRY = -110 + pose.bodyY;
 
-    // Render components in depth layer order (Z-indexing):
     // 1. Back Leg & Back Arm
     this.drawLeg(ctx, hipsX, hipsY, pose.limbs.leftLeg, colors, isFlashing, 'left', entity);
     this.drawArm(ctx, shoulderLX, shoulderLY, pose.limbs.leftArm, colors, isFlashing, 'left', entity);
 
-    // 2. Torso, Muscular Contours & Metallic Armor
+    // 2. Torso & Armor
     this.drawTorso(ctx, neckX, neckY, hipsX, hipsY, colors, isFlashing, entity);
 
-    // 3. Head, Mukut Crown, Hair, Tilak, Facial Details
+    // 3. Head & Crown
     this.drawHead(ctx, headX, headY, pose.limbs.headAngle, colors, isFlashing, entity);
 
     // 4. Front Leg
     this.drawLeg(ctx, hipsX, hipsY, pose.limbs.rightLeg, colors, isFlashing, 'right', entity);
 
-    // 5. Front Arm & Weapon with Motion Slash Arc
+    // 5. Front Arm & Weapon
     this.drawArm(ctx, shoulderRX, shoulderRY, pose.limbs.rightArm, colors, isFlashing, 'right', entity);
     this.drawWeapon(ctx, shoulderRX, shoulderRY, pose.limbs.rightArm, pose.limbs.weaponAngle, entity, colors, isFlashing);
-
-    ctx.restore();
   }
+
 
   /**
    * Draws Divine Astra Energy Aura

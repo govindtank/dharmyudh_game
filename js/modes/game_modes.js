@@ -84,55 +84,9 @@ export class GameModesController {
   }
 
   updatePlayer2Controls(entity, dt) {
-    if (entity.attacking || entity.hitstun > 0 || entity.died) return;
-
-    // Fetch Player 2 bindings from input system
-    let speed = entity.speed;
-    entity.blocking = !!(this.game.input.isActionPressed('Block', 2) && entity.grounded);
-    if (entity.blocking) speed *= 0.5;
-
-    let moveIntent = 0;
-    if (this.game.input.isActionPressed('MoveLeft', 2)) {
-      entity.x -= speed * dt;
-      moveIntent = -1;
-    }
-    if (this.game.input.isActionPressed('MoveRight', 2)) {
-      entity.x += speed * dt;
-      moveIntent = 1;
-    }
-
-    // Footsteps smoke
-    if (moveIntent !== 0 && entity.grounded && Math.random() < 0.15) {
-      this.game.particles.spawn(entity.x - entity.facing * 10, CONFIG.GROUND_Y, { type: 'smoke', color: '#888', size: 5, speed: 30 });
-    }
-
-    // Jump
-    if (this.game.input.isActionJustPressed('Jump', 2) && entity.grounded) {
-      entity.velocityY = -650;
-      entity.grounded = false;
-      this.game.audio.playSfx('jump', rng(0.85, 1.15));
-    }
-
-    // Dodge
-    if (this.game.input.isActionJustPressed('Dodge', 2) && entity.dodgeCooldown <= 0 && entity.grounded) {
-      entity.dodgeTimer = 0.15;
-      entity.dodgeCooldown = 0.6;
-      entity.invTimer = 0.2;
-      entity.velocityX = entity.facing * -450;
-      this.game.audio.playSfx('dodge');
-    }
-
-    // P2 Attacks
-    if (this.game.input.isActionJustPressed('AttackLight', 2) && entity.attackCooldown <= 0) {
-      this.game.performAttack(entity, this.game.player, 'light');
-    }
-    else if (this.game.input.isActionJustPressed('AttackHeavy', 2) && entity.attackCooldown <= 0) {
-      this.game.performAttack(entity, this.game.player, 'heavy');
-    }
-    else if (this.game.input.isActionJustPressed('Special', 2) && entity.specialCooldown <= 0 && entity.energy >= CONFIG.SPECIAL_COST) {
-      this.game.performSpecial(entity, this.game.player);
-    }
+    this.game.updatePlayerControls(entity, dt, this.game.player);
   }
+
 
   // ─── TRAINING PRACTICE MODE ────────────────────────────────
   startTrainingMode(playerCharId, dummyCharId) {
