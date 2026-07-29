@@ -7,7 +7,7 @@ import { StorageSystem } from './storage.js';
 import { AudioEngine } from './audio.js';
 import { InputSystem } from './input.js';
 import { AnimationEngine } from './animation.js';
-import { WebGLRendererSystem } from './webgl_renderer.js';
+import { RendererSystem } from './renderer.js';
 
 // Visual VFX & Stages
 import { ParticleSystem } from '../vfx/particles.js';
@@ -36,7 +36,8 @@ export class DharmYudhGame {
     this.audio = new AudioEngine(this.storage);
     this.input = new InputSystem(this.storage);
     this.anim = new AnimationEngine();
-    this.renderer = new WebGLRendererSystem(this.canvas, this.storage);
+    this.renderer = new RendererSystem(this.canvas, this.storage);
+
 
     // Visual & Environmental Systems
     this.particles = new ParticleSystem(400);
