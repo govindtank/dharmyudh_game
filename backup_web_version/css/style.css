@@ -68,9 +68,7 @@ html, body {
 #loading-screen.hidden {
   opacity: 0;
   pointer-events: none;
-  display: none !important;
 }
-
 
 .loading-logo {
   font-family: 'Orbitron', sans-serif;

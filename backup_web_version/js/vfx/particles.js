@@ -148,27 +148,6 @@ class Particle {
         ctx.fill();
         break;
 
-      case 'rock':
-        // Craggy stone rock chunk
-        ctx.fillStyle = this.color || '#5d4037';
-        ctx.beginPath();
-        ctx.moveTo(-this.size, -this.size * 0.5);
-        ctx.lineTo(this.size * 0.8, -this.size);
-        ctx.lineTo(this.size, this.size * 0.7);
-        ctx.lineTo(-this.size * 0.6, this.size);
-        ctx.closePath();
-        ctx.fill();
-        break;
-
-      case 'flame':
-        // Flame drop particle
-        ctx.fillStyle = this.color || '#ff3d00';
-        ctx.beginPath();
-        ctx.arc(0, 0, this.size * (1 - (1 - this.alpha) * 0.5), 0, Math.PI * 2);
-        ctx.fill();
-        break;
-
-
       case 'text':
         ctx.rotate(-this.rotation); // Keep text upright
         ctx.fillStyle = this.color;
@@ -326,59 +305,4 @@ export class ParticleSystem {
       drag: 0.96
     });
   }
-
-  // Warrior-specific signature elemental bursts
-  spawnElementalHit(x, y, warriorId) {
-    switch (warriorId) {
-      case 'bhima':
-      case 'duryodhana':
-        // Rock & Ground Debris burst
-        for (let i = 0; i < 14; i++) {
-          this.spawn(x, y, {
-            type: 'rock',
-            color: '#6d4c41',
-            life: rng(0.4, 0.8),
-            size: rng(4, 9),
-            speed: rng(150, 350),
-            gravity: 400,
-            drag: 0.94
-          });
-        }
-        break;
-
-      case 'karna':
-      case 'draupadi':
-        // Flaming embers
-        for (let i = 0; i < 18; i++) {
-          this.spawn(x, y, {
-            type: 'flame',
-            color: rng(0, 1) > 0.5 ? '#ff3d00' : '#ffab00',
-            life: rng(0.3, 0.7),
-            size: rng(5, 12),
-            speed: rng(100, 300),
-            drag: 0.92,
-            gravity: -100
-          });
-        }
-        break;
-
-      case 'arjuna':
-      case 'ashwatthama':
-        // Stardust / Ethereal beam sparks
-        for (let i = 0; i < 20; i++) {
-          this.spawn(x, y, {
-            type: 'spark',
-            color: warriorId === 'arjuna' ? '#00e5ff' : '#00b0ff',
-            life: rng(0.3, 0.6),
-            size: rng(3, 6),
-            speed: rng(200, 450),
-            drag: 0.95,
-            trail: true,
-            maxTrail: 5
-          });
-        }
-        break;
-    }
-  }
 }
-

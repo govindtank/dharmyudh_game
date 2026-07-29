@@ -65,8 +65,6 @@ export class BaseCharacter {
     this.hitstun = 0;
     this.hitFlash = 0;
     this.died = false;
-    this.weaponTrail = []; // Array of previous weapon tip points for motion trails
-
 
     // AI Variables
     this.aiState = 'approach';

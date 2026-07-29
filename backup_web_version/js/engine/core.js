@@ -7,7 +7,7 @@ import { StorageSystem } from './storage.js';
 import { AudioEngine } from './audio.js';
 import { InputSystem } from './input.js';
 import { AnimationEngine } from './animation.js';
-import { RendererSystem } from './renderer.js';
+import { WebGLRendererSystem } from './webgl_renderer.js';
 
 // Visual VFX & Stages
 import { ParticleSystem } from '../vfx/particles.js';
@@ -36,8 +36,7 @@ export class DharmYudhGame {
     this.audio = new AudioEngine(this.storage);
     this.input = new InputSystem(this.storage);
     this.anim = new AnimationEngine();
-    this.renderer = new RendererSystem(this.canvas, this.storage);
-
+    this.renderer = new WebGLRendererSystem(this.canvas, this.storage);
 
     // Visual & Environmental Systems
     this.particles = new ParticleSystem(400);
@@ -924,11 +923,7 @@ export class DharmYudhGame {
       if (!this.story.inDialogue) {
         this.combat.drawKarmaHUD(this.renderer.ctx);
       }
-
-      // Draw Cinematic Super Astra Cut-In Banner
-      this.combat.drawAstraCutscene(this.renderer.ctx);
     }
-
 
     // Draw Story dialogues box if active
     if (this.state === 'battle' && this.story.inDialogue) {
