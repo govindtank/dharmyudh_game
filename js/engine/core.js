@@ -177,8 +177,11 @@ export class DharmYudhGame {
       }
 
       // Settings or Pause shortcut
-      if (this.input['key' + 'Just' + 'Pressed']['Escape']) {
-        if (this.state === 'menu') {
+      const keyEsc = this.input.keyJustPressed['Escape'];
+      const keyP = this.input.keyJustPressed['p'] || this.input.keyJustPressed['P'];
+      
+      if (keyEsc || keyP) {
+        if (this.state === 'menu' && keyEsc) {
           this.ui.settingsPanel.toggle();
         } else if (this.state === 'battle') {
           this.state = 'pause';
@@ -190,7 +193,7 @@ export class DharmYudhGame {
       if (this.state === 'battle' && this.input.mouseClicked) {
         const mx = this.input.mousePos.x;
         const my = this.input.mousePos.y;
-        if (mx >= CONFIG.W / 2 - 40 && mx <= CONFIG.W / 2 + 40 && my >= 75 && my <= 100) {
+        if (mx >= CONFIG.W / 2 - 40 && mx <= CONFIG.W / 2 + 40 && my >= 70 && my <= 100) {
           this.state = 'pause';
           this.audio.playSfx('select');
         }
@@ -207,11 +210,18 @@ export class DharmYudhGame {
           this.selectedChar = (this.selectedChar + 1) % CHARACTERS.length;
           this.audio.playSfx('select');
         }
+        
+        // Escape key or click bottom text area to return to menu
+        if (this.input.keyJustPressed['Escape'] || (this.input.mouseClicked && this.input.mousePos.y >= CONFIG.H - 80)) {
+          this.state = 'menu';
+          this.audio.playSfx('select');
+        }
         // Enter key or click in middle of screen to confirm character selection
-        if (this.input.keyJustPressed['Enter'] || (this.input.mouseClicked && this.input.mousePos.x >= 300 && this.input.mousePos.x <= 980)) {
+        else if (this.input.keyJustPressed['Enter'] || (this.input.mouseClicked && this.input.mousePos.x >= 300 && this.input.mousePos.x <= 980)) {
           this.confirmCharacter();
         }
       }
+
 
       // UI system handles result and pause inputs
 

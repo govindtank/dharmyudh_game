@@ -106,10 +106,11 @@ export class UISystem {
         }
         this.game.audio.playSfx('select', 1.2);
       }
-      if (this.game.input[kjp]['Escape']) {
+      if (this.game.input[kjp]['Escape'] || this.game.input[kjp]['p'] || this.game.input[kjp]['P']) {
         this.game.state = 'battle';
         this.game.audio.playSfx('select', 0.85);
       }
+
 
       // Mouse/Touch click support for pause menu options
       if (this.game.input.mouseClicked) {
