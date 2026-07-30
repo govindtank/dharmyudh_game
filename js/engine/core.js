@@ -406,16 +406,16 @@ export class DharmYudhGame {
       // Handle overlap resolutions
       this.resolveCombatCollisions(dt);
 
-      // Enforce camera-relative screen boundaries (elastic invisible walls)
-      const midX = (this.player.x + this.enemy.x) / 2;
-      const distance = Math.abs(this.player.x - this.enemy.x);
-      const zoom = clamp(CONFIG.W / (distance + 400), 0.75, 1.15);
-      const halfVisibleWidth = (CONFIG.W / 2) / zoom;
-      const minX = midX - halfVisibleWidth + 40; // 40px buffer from screen edge
-      const maxX = midX + halfVisibleWidth - 40;
+      // Enforce camera-relative screen boundaries (elastic invisible walls using actual visible viewport)
+      const currentZoom = this.renderer.cameraZoom || 1.0;
+      const currentMidX = -this.renderer.cameraX + CONFIG.W / 2;
+      const halfVisibleWidth = (CONFIG.W / 2) / currentZoom;
+      const minX = currentMidX - halfVisibleWidth + 50; // 50px buffer from screen edge
+      const maxX = currentMidX + halfVisibleWidth - 50;
 
       this.player.x = clamp(this.player.x, minX, maxX);
       this.enemy.x = clamp(this.enemy.x, minX, maxX);
+
 
 
       // Trigger weapon clash check
@@ -946,8 +946,9 @@ export class DharmYudhGame {
     
     if (overlap > 0) {
       const dir = this.player.x < this.enemy.x ? -1 : 1;
-      const minX = 40;
-      const maxX = CONFIG.W - 40;
+      const minX = 60;
+      const maxX = CONFIG.W - 60;
+
       
       const p1AtBound = (this.player.x <= minX && dir === -1) || (this.player.x >= maxX && dir === 1);
       const p2AtBound = (this.enemy.x <= minX && dir === 1) || (this.enemy.x >= maxX && dir === -1);
