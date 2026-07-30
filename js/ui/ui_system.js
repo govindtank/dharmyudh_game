@@ -2,7 +2,8 @@
 // DHARMYUDH - Master UI & HUD System
 // ============================================================
 
-import { CONFIG, clamp } from '../engine/config.js';
+import { CONFIG, clamp, lerp } from '../engine/config.js';
+
 import { SettingsPanel } from './settings.js';
 import { ACHIEVEMENTS } from '../progression/achievements.js';
 import { CHARACTERS } from '../characters/roster.js';
